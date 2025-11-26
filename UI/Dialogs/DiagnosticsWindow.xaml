@@ -1,0 +1,124 @@
+﻿<Window x:Class="SEE_INSADE.UI.Dialogs.DiagnosticsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="SEE INSADE - System Diagnostics" 
+        Height="600" Width="800"
+        WindowStartupLocation="CenterOwner"
+        Background="{StaticResource BackgroundBrush}">
+
+    <Grid Margin="15">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <Border Grid.Row="0" Background="{StaticResource PanelBrush}" CornerRadius="4" Padding="15,10">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="🔧" FontSize="20" Margin="0,0,10,0"/>
+                <TextBlock Text="SYSTEM DIAGNOSTICS &amp; MAINTENANCE" 
+                          FontSize="16" FontWeight="Bold" Foreground="White"/>
+            </StackPanel>
+        </Border>
+
+        <!-- Diagnostics Content -->
+        <TabControl Grid.Row="1" Margin="0,10,0,0" Background="Transparent">
+
+            <!-- System Health -->
+            <TabItem Header="SYSTEM HEALTH">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="10">
+
+                        <!-- Performance Metrics -->
+                        <GroupBox Header="Performance Metrics" Foreground="White" 
+                                 Background="{StaticResource PanelBrush}" Padding="15" Margin="0,0,0,10">
+                            <StackPanel>
+                                <StackPanel Orientation="Horizontal" Margin="0,5">
+                                    <TextBlock Text="CPU Usage:" Width="120" Foreground="#FF94A3B8"/>
+                                    <ProgressBar Value="45" Maximum="100" Width="200" Height="10"/>
+                                    <TextBlock Text="45%" Margin="10,0,0,0" Foreground="White"/>
+                                </StackPanel>
+
+                                <StackPanel Orientation="Horizontal" Margin="0,5">
+                                    <TextBlock Text="Memory Usage:" Width="120" Foreground="#FF94A3B8"/>
+                                    <ProgressBar Value="65" Maximum="100" Width="200" Height="10"/>
+                                    <TextBlock Text="65%" Margin="10,0,0,0" Foreground="White"/>
+                                </StackPanel>
+
+                                <StackPanel Orientation="Horizontal" Margin="0,5">
+                                    <TextBlock Text="GPU Usage:" Width="120" Foreground="#FF94A3B8"/>
+                                    <ProgressBar Value="30" Maximum="100" Width="200" Height="10"/>
+                                    <TextBlock Text="30%" Margin="10,0,0,0" Foreground="White"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </GroupBox>
+
+                        <!-- Component Status -->
+                        <GroupBox Header="Component Status" Foreground="White" 
+                                 Background="{StaticResource PanelBrush}" Padding="15">
+                            <StackPanel>
+                                <StackPanel Orientation="Horizontal" Margin="0,5">
+                                    <TextBlock Text="Scanner System:" Width="150" Foreground="#FF94A3B8"/>
+                                    <TextBlock Text="✅ OPERATIONAL" Foreground="#FF10B981" FontWeight="Bold"/>
+                                </StackPanel>
+
+                                <StackPanel Orientation="Horizontal" Margin="0,5">
+                                    <TextBlock Text="Detector Array:" Width="150" Foreground="#FF94A3B8"/>
+                                    <TextBlock Text="✅ OPERATIONAL" Foreground="#FF10B981" FontWeight="Bold"/>
+                                </StackPanel>
+
+                                <StackPanel Orientation="Horizontal" Margin="0,5">
+                                    <TextBlock Text="Image Processor:" Width="150" Foreground="#FF94A3B8"/>
+                                    <TextBlock Text="✅ OPERATIONAL" Foreground="#FF10B981" FontWeight="Bold"/>
+                                </StackPanel>
+
+                                <StackPanel Orientation="Horizontal" Margin="0,5">
+                                    <TextBlock Text="Data Storage:" Width="150" Foreground="#FF94A3B8"/>
+                                    <TextBlock Text="⚠️ WARNING" Foreground="#FFF59E0B" FontWeight="Bold"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </GroupBox>
+
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- Hardware Tests -->
+            <TabItem Header="HARDWARE TESTS">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="10">
+
+                        <Button Content="RUN DETECTOR SELF-TEST" Style="{StaticResource ModernButton}" 
+                               Height="35" FontSize="12" Click="RunDetectorTest_Click"/>
+
+                        <Button Content="TEST IMAGE PROCESSING" Style="{StaticResource ModernButton}" 
+                               Height="35" FontSize="12" Margin="0,10,0,0" Click="RunImageTest_Click"/>
+
+                        <Button Content="VERIFY CALIBRATION" Style="{StaticResource ModernButton}" 
+                               Height="35" FontSize="12" Margin="0,10,0,0" Click="RunCalibrationTest_Click"/>
+
+                        <!-- Test Results -->
+                        <Border Background="#202563EB" CornerRadius="4" Padding="10" Margin="0,15,0,0">
+                            <StackPanel>
+                                <TextBlock x:Name="TestResultsText" Text="No tests run yet..." 
+                                          Foreground="White" TextWrapping="Wrap"/>
+                            </StackPanel>
+                        </Border>
+
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+        </TabControl>
+
+        <!-- Action Buttons -->
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,15,0,0">
+            <Button Content="GENERATE REPORT" Width="120" Height="30" 
+                   Style="{StaticResource ModernButton}" Click="GenerateReport_Click"/>
+            <Button Content="CLOSE" Width="80" Height="30" Margin="15,0,0,0" 
+                   Style="{StaticResource ModernButton}" Click="Close_Click"/>
+        </StackPanel>
+
+    </Grid>
+</Window>

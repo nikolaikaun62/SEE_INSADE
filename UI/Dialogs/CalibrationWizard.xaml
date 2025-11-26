@@ -1,0 +1,123 @@
+﻿<Window x:Class="SEE_INSADE.UI.Dialogs.CalibrationWizard"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="SEE INSADE - Calibration Wizard" 
+        Height="600" Width="800"
+        WindowStartupLocation="CenterOwner"
+        Background="{StaticResource BackgroundBrush}">
+
+    <Grid Margin="15">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <Border Grid.Row="0" Background="{StaticResource PanelBrush}" CornerRadius="4" Padding="15,10">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="🎯" FontSize="20" Margin="0,0,10,0"/>
+                <TextBlock Text="CALIBRATION WIZARD" 
+                          FontSize="16" FontWeight="Bold" Foreground="White"/>
+            </StackPanel>
+        </Border>
+
+        <!-- Wizard Content -->
+        <Grid Grid.Row="1" Margin="0,10,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="200"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Steps Navigation -->
+            <Border Grid.Column="0" Background="{StaticResource PanelBrush}" CornerRadius="4" Margin="0,0,10,0">
+                <StackPanel Margin="10">
+                    <TextBlock Text="Calibration Steps" Foreground="#FF60A5FA" FontWeight="Bold" Margin="0,0,0,10"/>
+
+                    <ListBox x:Name="StepsListBox" Background="Transparent" BorderThickness="0"
+                            SelectionChanged="StepsListBox_SelectionChanged">
+                        <ListBoxItem Content="1. Preparation" Tag="Preparation"/>
+                        <ListBoxItem Content="2. Detector Check" Tag="DetectorCheck"/>
+                        <ListBoxItem Content="3. Energy Calibration" Tag="EnergyCalibration"/>
+                        <ListBoxItem Content="4. Geometry Setup" Tag="GeometrySetup"/>
+                        <ListBoxItem Content="5. Image Quality" Tag="ImageQuality"/>
+                        <ListBoxItem Content="6. Final Verification" Tag="FinalVerification"/>
+                    </ListBox>
+                </StackPanel>
+            </Border>
+
+            <!-- Step Content -->
+            <Border Grid.Column="1" Background="{StaticResource PanelBrush}" CornerRadius="4">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="20">
+
+                        <!-- Preparation Step -->
+                        <StackPanel x:Name="PreparationStep" Visibility="Visible">
+                            <TextBlock Text="Preparation" FontSize="18" FontWeight="Bold" Foreground="White" Margin="0,0,0,15"/>
+                            <TextBlock Text="Before starting calibration, ensure:" 
+                                      Foreground="#FF94A3B8" TextWrapping="Wrap" Margin="0,0,0,10"/>
+
+                            <StackPanel Margin="20,10">
+                                <CheckBox x:Name="CheckScannerClean" Content="Scanner surface is clean" Foreground="White"/>
+                                <CheckBox x:Name="CheckReferenceObjects" Content="Reference objects are available" Foreground="White" Margin="0,5,0,0"/>
+                                <CheckBox x:Name="CheckStablePower" Content="Stable power supply" Foreground="White" Margin="0,5,0,0"/>
+                                <CheckBox x:Name="CheckEnvironment" Content="Stable environment conditions" Foreground="White" Margin="0,5,0,0"/>
+                            </StackPanel>
+
+                            <Button Content="NEXT →" Style="{StaticResource ModernButton}" 
+                                   HorizontalAlignment="Right" Margin="0,20,0,0" 
+                                   Click="NextStep_Click"/>
+                        </StackPanel>
+
+                        <!-- Detector Check Step -->
+                        <StackPanel x:Name="DetectorCheckStep" Visibility="Collapsed">
+                            <TextBlock Text="Detector Array Check" FontSize="18" FontWeight="Bold" Foreground="White" Margin="0,0,0,15"/>
+
+                            <StackPanel>
+                                <TextBlock Text="Checking detector array health..." Foreground="#FF94A3B8" Margin="0,0,0,10"/>
+                                <ProgressBar x:Name="DetectorCheckProgress" Height="20" Margin="0,0,0,10"/>
+                                <TextBlock x:Name="DetectorCheckStatus" Text="Initializing..." Foreground="#FF60A5FA" FontSize="11"/>
+
+                                <StackPanel Margin="0,15,0,0">
+                                    <TextBlock Text="Detector Status:" Foreground="White" FontWeight="SemiBold"/>
+                                    <TextBlock x:Name="DetectorStatusText" Text="Checking..." Foreground="#FF94A3B8" FontSize="11"/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,20,0,0">
+                                <Button Content="← BACK" Style="{StaticResource ModernButton}" Click="PreviousStep_Click"/>
+                                <Button Content="NEXT →" Style="{StaticResource ModernButton}" Margin="15,0,0,0" Click="NextStep_Click"/>
+                            </StackPanel>
+                        </StackPanel>
+
+                        <!-- Add more steps here... -->
+
+                    </StackPanel>
+                </ScrollViewer>
+            </Border>
+
+        </Grid>
+
+        <!-- Progress & Actions -->
+        <Border Grid.Row="2" Background="{StaticResource PanelBrush}" CornerRadius="4" Margin="0,10,0,0" Padding="15">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Column="0">
+                    <TextBlock Text="Overall Progress" Foreground="#FF94A3B8" FontSize="11"/>
+                    <ProgressBar x:Name="OverallProgress" Height="10" Margin="0,5,0,0"/>
+                </StackPanel>
+
+                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                    <Button Content="🔄 RESTART" Style="{StaticResource ModernButton}" Click="RestartWizard_Click"/>
+                    <Button Content="💾 SAVE PROFILE" Style="{StaticResource ModernButton}" Margin="15,0,0,0" Click="SaveProfile_Click"/>
+                    <Button Content="❌ CANCEL" Style="{StaticResource ModernButton}" Margin="15,0,0,0" Click="Cancel_Click"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+    </Grid>
+</Window>
