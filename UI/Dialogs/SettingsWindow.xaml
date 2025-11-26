@@ -1,0 +1,85 @@
+﻿<Window x:Class="SEE_INSADE.UI.Dialogs.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="SEE INSADE - Settings" 
+        Height="600" Width="800"
+        WindowStartupLocation="CenterOwner"
+        Background="{StaticResource BackgroundBrush}">
+
+    <Grid Margin="15">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <Border Grid.Row="0" Background="{StaticResource PanelBrush}" CornerRadius="4" Padding="15,10">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="⚙️" FontSize="20" Margin="0,0,10,0"/>
+                <TextBlock Text="APPLICATION SETTINGS" 
+                          FontSize="16" FontWeight="Bold" Foreground="White"/>
+            </StackPanel>
+        </Border>
+
+        <!-- Settings Content -->
+        <TabControl Grid.Row="1" Margin="0,10,0,0" Background="Transparent">
+
+            <!-- Scanner Settings -->
+            <TabItem Header="SCANNER">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="10">
+                        <GroupBox Header="Scanner Configuration" Style="{StaticResource ControlGroupStyle}">
+                            <StackPanel Margin="5">
+                                <StackPanel Orientation="Horizontal" Margin="0,5">
+                                    <TextBlock Text="Width:" Width="120" Foreground="{StaticResource SecondaryTextBrush}"/>
+                                    <TextBox Text="800" Width="100"/>
+                                    <TextBlock Text="px" Margin="10,0,0,0" Foreground="{StaticResource SecondaryTextBrush}"/>
+                                </StackPanel>
+
+                                <StackPanel Orientation="Horizontal" Margin="0,5">
+                                    <TextBlock Text="Height:" Width="120" Foreground="{StaticResource SecondaryTextBrush}"/>
+                                    <TextBox Text="400" Width="100"/>
+                                    <TextBlock Text="px" Margin="10,0,0,0" Foreground="{StaticResource SecondaryTextBrush}"/>
+                                </StackPanel>
+
+                                <StackPanel Orientation="Horizontal" Margin="0,5">
+                                    <TextBlock Text="Detector Count:" Width="120" Foreground="{StaticResource SecondaryTextBrush}"/>
+                                    <Slider Minimum="100" Maximum="1000" Value="400" Width="150"/>
+                                    <TextBlock Text="400" Width="30" Margin="10,0,0,0" Foreground="{StaticResource TextBrush}"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </GroupBox>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- Display Settings -->
+            <TabItem Header="DISPLAY">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="10">
+                        <GroupBox Header="Visual Settings" Style="{StaticResource ControlGroupStyle}">
+                            <StackPanel Margin="5">
+                                <CheckBox Content="Show Grid" Foreground="{StaticResource TextBrush}" IsChecked="True"/>
+                                <CheckBox Content="Show Detector Info" Foreground="{StaticResource TextBrush}" IsChecked="True" Margin="0,5,0,0"/>
+                                <CheckBox Content="Real-time Statistics" Foreground="{StaticResource TextBrush}" IsChecked="True" Margin="0,5,0,0"/>
+                            </StackPanel>
+                        </GroupBox>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+        </TabControl>
+
+        <!-- Action Buttons -->
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,15,0,0">
+            <Button Content="SAVE" Width="80" Height="30" 
+                   Style="{StaticResource ModernButton}" Click="Save_Click"/>
+            <Button Content="CANCEL" Width="80" Height="30" Margin="15,0,0,0" 
+                   Style="{StaticResource ModernButton}" Click="Cancel_Click"/>
+            <Button Content="APPLY" Width="80" Height="30" Margin="15,0,0,0" 
+                   Style="{StaticResource ModernButton}" Click="Apply_Click"/>
+        </StackPanel>
+
+    </Grid>
+</Window>
