@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -45,6 +46,18 @@ namespace SEE_INSADE.Core.Raw
 
             byte[] data = File.ReadAllBytes(filePath);
             int headerHeight = TryReadHeaderDetectorHeight(data);
+
+            if (manualOffset < 0 &&
+                TryDecodeNativeOisPng(
+                    data,
+                    filePath,
+                    rotate90Clockwise,
+                    flipHorizontal,
+                    flipVertical,
+                    out NuctechImgScan? nativeScan))
+            {
+                return nativeScan!;
+            }
 
             if (TryDecodeNuctechContainer(
                     data,
@@ -335,6 +348,164 @@ namespace SEE_INSADE.Core.Raw
                 MaterialMap = materialMap,
                 DensityMap = densityMap
             };
+        }
+
+        private static bool TryDecodeNativeOisPng(
+            byte[] data,
+            string filePath,
+            bool rotate90Clockwise,
+            bool flipHorizontal,
+            bool flipVertical,
+            out NuctechImgScan? scan)
+        {
+            scan = null;
+
+            string? helperPath = FindNativeHelperPath();
+            string? sdkPath = FindOisSdkPath();
+
+            if (helperPath == null || sdkPath == null)
+                return false;
+
+            string workDir = Path.Combine(Path.GetTempPath(), "SEE_INSADE_OIS_IMG_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(workDir);
+
+            try
+            {
+                var startInfo = new ProcessStartInfo
+                {
+                    FileName = helperPath,
+                    Arguments = $"--sdk {Quote(sdkPath)} --img {Quote(filePath)} --out {Quote(workDir)}",
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    CreateNoWindow = true
+                };
+
+                using Process? process = Process.Start(startInfo);
+                if (process == null)
+                    return false;
+
+                var stdoutTask = process.StandardOutput.ReadToEndAsync();
+                var stderrTask = process.StandardError.ReadToEndAsync();
+
+                if (!process.WaitForExit(30000))
+                {
+                    try { process.Kill(true); } catch { }
+                    return false;
+                }
+
+                _ = stdoutTask.GetAwaiter().GetResult();
+                _ = stderrTask.GetAwaiter().GetResult();
+
+                if (process.ExitCode != 0)
+                    return false;
+
+                string pngPath = Path.Combine(workDir, "view0.png");
+                if (!File.Exists(pngPath))
+                    pngPath = Directory.EnumerateFiles(workDir, "view*.png").OrderBy(path => path).FirstOrDefault() ?? string.Empty;
+
+                if (string.IsNullOrWhiteSpace(pngPath) || !File.Exists(pngPath))
+                    return false;
+
+                scan = CreateScanFromPng(filePath, data, pngPath);
+
+                if (rotate90Clockwise || flipHorizontal || flipVertical)
+                    scan = Transform(scan, rotate90Clockwise, flipHorizontal, flipVertical);
+
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static NuctechImgScan CreateScanFromPng(string filePath, byte[] sourceData, string pngPath)
+        {
+            var image = new BitmapImage();
+            image.BeginInit();
+            image.CacheOption = BitmapCacheOption.OnLoad;
+            image.UriSource = new Uri(pngPath, UriKind.Absolute);
+            image.EndInit();
+            image.Freeze();
+
+            var converted = new FormatConvertedBitmap(image, PixelFormats.Bgr32, null, 0);
+            int width = converted.PixelWidth;
+            int height = converted.PixelHeight;
+            byte[] pixels = new byte[width * height * 4];
+            converted.CopyPixels(pixels, width * 4, 0);
+
+            MaterialType[,] materialMap = new MaterialType[width, height];
+            double[,] densityMap = new double[width, height];
+
+            for (int y = 0; y < height; y++)
+            {
+                for (int x = 0; x < width; x++)
+                {
+                    int index = (y * width + x) * 4;
+                    byte b = pixels[index];
+                    byte g = pixels[index + 1];
+                    byte r = pixels[index + 2];
+
+                    materialMap[x, y] = ClassifyMaterial(r, g, b, 0);
+                    densityMap[x, y] = EstimateDensity(r, g, b, 0);
+                    pixels[index + 3] = 255;
+                }
+            }
+
+            return new NuctechImgScan
+            {
+                FilePath = filePath,
+                FileName = Path.GetFileName(filePath),
+                Model = TryExtractModel(sourceData),
+                SerialNumber = TryExtractSerial(sourceData),
+                ScanTimeText = TryExtractDateTime(sourceData),
+                Width = width,
+                Height = height,
+                DataOffset = 0,
+                TrailingBytes = 0,
+                Bitmap = CreateBitmap(width, height, pixels),
+                MaterialMap = materialMap,
+                DensityMap = densityMap
+            };
+        }
+
+        private static string? FindNativeHelperPath()
+        {
+            string baseDir = AppContext.BaseDirectory;
+            string[] candidates =
+            {
+                Path.Combine(baseDir, "Tools", "OisImgNativeDecodeHelper", "OisImgNativeDecodeHelper.exe"),
+                Path.Combine(Environment.CurrentDirectory, "Tools", "OisImgNativeDecodeHelper", "bin", "Debug", "net8.0-windows", "win-x86", "OisImgNativeDecodeHelper.exe"),
+                Path.Combine(Environment.CurrentDirectory, "Tools", "OisImgNativeDecodeHelper", "bin", "Release", "net8.0-windows", "win-x86", "OisImgNativeDecodeHelper.exe"),
+                Path.GetFullPath(Path.Combine(baseDir, "..", "..", "..", "Tools", "OisImgNativeDecodeHelper", "bin", "Debug", "net8.0-windows", "win-x86", "OisImgNativeDecodeHelper.exe")),
+                Path.GetFullPath(Path.Combine(baseDir, "..", "..", "..", "Tools", "OisImgNativeDecodeHelper", "bin", "Release", "net8.0-windows", "win-x86", "OisImgNativeDecodeHelper.exe"))
+            };
+
+            return candidates.FirstOrDefault(File.Exists);
+        }
+
+        private static string? FindOisSdkPath()
+        {
+            string? envPath = Environment.GetEnvironmentVariable("SEE_INSADE_OIS_SDK");
+            string[] candidates =
+            {
+                envPath ?? string.Empty,
+                Path.Combine(AppContext.BaseDirectory, "Plugins", "NuctechImg", "NativeRuntime"),
+                Path.Combine(Environment.CurrentDirectory, "Plugins", "NuctechImg", "NativeRuntime"),
+                Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "Plugins", "NuctechImg", "NativeRuntime")),
+                @"D:\OISV3\Plug-ins\Plugin_WeKnow\sdk",
+                @"C:\OISV3\Plug-ins\Plugin_WeKnow\sdk",
+                @"D:\XRayV3\Plug-ins\Plugin_WeKnow\sdk",
+                @"C:\XRayV3\Plug-ins\Plugin_WeKnow\sdk"
+            };
+
+            return candidates.FirstOrDefault(path => !string.IsNullOrWhiteSpace(path) && File.Exists(Path.Combine(path, "img2png.dll")));
+        }
+
+        private static string Quote(string value)
+        {
+            return "\"" + value.Replace("\"", "\\\"") + "\"";
         }
 
         private static bool TryDecodeMultiPlane16(

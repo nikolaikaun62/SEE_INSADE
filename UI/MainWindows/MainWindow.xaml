@@ -141,17 +141,27 @@
             <Setter Property="Margin" Value="0,6,0,0"/>
             <Setter Property="FontSize" Value="12"/>
         </Style>
+
+        <Style TargetType="TextBox">
+            <Setter Property="Background" Value="#0B1119"/>
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+            <Setter Property="BorderBrush" Value="#2D3A4D"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="8,5"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="MinHeight" Value="30"/>
+        </Style>
     </Window.Resources>
 
-    <Grid Background="{StaticResource PageBrush}">
+        <Grid Background="{StaticResource PageBrush}">
         <Grid.RowDefinitions>
-            <RowDefinition Height="72"/>
+            <RowDefinition Height="58"/>
             <RowDefinition Height="*"/>
-            <RowDefinition Height="34"/>
+            <RowDefinition Height="28"/>
         </Grid.RowDefinitions>
 
         <Border Grid.Row="0" Background="#0B1118" BorderBrush="{StaticResource LineBrush}" BorderThickness="0,0,0,1">
-            <Grid Margin="22,0">
+                <Grid Margin="14,0">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="*"/>
@@ -159,7 +169,7 @@
                 </Grid.ColumnDefinitions>
 
                 <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                    <TextBlock Text="SEE INSADE" FontSize="23" FontWeight="Bold"/>
+                    <TextBlock Text="SEE INSADE" FontSize="20" FontWeight="Bold"/>
                     <TextBlock x:Name="SubtitleText" Text="X-RAY LINE SCAN EMULATOR" Style="{StaticResource TinyLabel}" Margin="1,2,0,0"/>
                 </StackPanel>
 
@@ -194,19 +204,19 @@
             </Grid>
         </Border>
 
-        <Grid Grid.Row="1" Margin="16">
+        <Grid Grid.Row="1" Margin="8">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
-                <RowDefinition Height="108"/>
+                <RowDefinition Height="92"/>
             </Grid.RowDefinitions>
 
             <!-- Filters and tuning controls -->
-            <Border Grid.Row="0" Style="{StaticResource CardBorder}" Padding="10" Margin="0,0,0,10">
+            <Border Grid.Row="0" Style="{StaticResource CardBorder}" Padding="8" Margin="0,0,0,6">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="0"/>
                     </Grid.RowDefinitions>
 
                     <ScrollViewer Grid.Row="0"
@@ -226,7 +236,7 @@
                         </WrapPanel>
                     </ScrollViewer>
 
-                    <Grid Grid.Row="1" Margin="0,4,0,0">
+                    <Grid Grid.Row="1" Margin="0,4,0,0" Visibility="Collapsed">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="220"/>
                             <ColumnDefinition Width="220"/>
@@ -276,14 +286,66 @@
             <Border Grid.Row="1"
                     Style="{StaticResource CardBorder}"
                     Background="#030507"
-                    Padding="12"
+                    Padding="6"
                     ClipToBounds="True">
-                <Grid Background="#020304">
-                    <Viewbox Stretch="Uniform">
-                        <Image x:Name="FilteredImage" Stretch="None" RenderOptions.BitmapScalingMode="NearestNeighbor"/>
-                    </Viewbox>
-                    <Border HorizontalAlignment="Right" Width="2" Background="{StaticResource AccentBrush}" Opacity="0.9"/>
-                    <Border HorizontalAlignment="Right" Width="34" Background="#1837D3B5" IsHitTestVisible="False"/>
+                <Grid x:Name="ProjectionHost"
+                      Background="#020304"
+                      ClipToBounds="True"
+                      Cursor="Cross"
+                      MouseWheel="ProjectionHost_MouseWheel"
+                      MouseLeftButtonDown="ProjectionHost_MouseLeftButtonDown"
+                      MouseLeftButtonUp="ProjectionHost_MouseLeftButtonUp"
+                      MouseMove="ProjectionHost_MouseMove"
+                      MouseRightButtonDown="ProjectionHost_MouseRightButtonDown">
+                    <Image x:Name="FilteredImage"
+                           Stretch="None"
+                           HorizontalAlignment="Left"
+                           VerticalAlignment="Top"
+                           RenderOptions.BitmapScalingMode="HighQuality">
+                        <Image.RenderTransform>
+                            <TransformGroup>
+                                <ScaleTransform x:Name="ProjectionScaleTransform" ScaleX="1" ScaleY="1"/>
+                                <TranslateTransform x:Name="ProjectionTranslateTransform" X="0" Y="0"/>
+                            </TransformGroup>
+                        </Image.RenderTransform>
+                    </Image>
+                    <Border x:Name="ScanLineIndicator"
+                            HorizontalAlignment="Right"
+                            Width="1"
+                            Background="{StaticResource AccentBrush}"
+                            Opacity="0.55"
+                            IsHitTestVisible="False"
+                            Visibility="Collapsed"/>
+                    <Border HorizontalAlignment="Left"
+                            VerticalAlignment="Top"
+                            Margin="10"
+                            Background="#D00B1118"
+                            BorderBrush="#2D3A4D"
+                            BorderThickness="1"
+                            CornerRadius="7"
+                            Padding="9,5"
+                            IsHitTestVisible="False">
+                        <TextBlock x:Name="ZoomText" Text="100%" FontSize="12" FontWeight="SemiBold"/>
+                    </Border>
+                    <StackPanel HorizontalAlignment="Right"
+                                VerticalAlignment="Top"
+                                Margin="10"
+                                Orientation="Horizontal">
+                        <Button x:Name="FitWidthButton"
+                                Content="Width"
+                                Style="{StaticResource ModernButton}"
+                                MinHeight="28"
+                                Padding="9,4"
+                                Margin="0,0,6,0"
+                                Click="FitWidth_Click"/>
+                        <Button x:Name="FitScreenButton"
+                                Content="Fit"
+                                Style="{StaticResource ModernButton}"
+                                MinHeight="28"
+                                Padding="9,4"
+                                Margin="0"
+                                Click="FitScreen_Click"/>
+                    </StackPanel>
                 </Grid>
             </Border>
 
@@ -293,9 +355,9 @@
                     Margin="0,12,0,0">
                 <Grid>
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="250"/>
-                        <ColumnDefinition Width="250"/>
-                        <ColumnDefinition Width="190"/>
+                        <ColumnDefinition Width="210"/>
+                        <ColumnDefinition Width="210"/>
+                        <ColumnDefinition Width="380"/>
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
 
@@ -323,9 +385,31 @@
                         </Grid>
                     </StackPanel>
 
-                    <StackPanel Grid.Column="2" VerticalAlignment="Center">
-                        <TextBlock Text="SCAN SETTINGS" Style="{StaticResource TinyLabel}"/>
-                        <CheckBox x:Name="InvertDirectionCheck" Content="Invert scan direction" Margin="0,7,0,0"/>
+                    <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="0,0,16,0">
+                        <TextBlock x:Name="ScanSettingsLabel" Text="SCAN SETTINGS" Style="{StaticResource TinyLabel}"/>
+                        <ComboBox x:Name="ScanSourceComboBox"
+                                  MinHeight="30"
+                                  Margin="0,5,0,0"
+                                  SelectionChanged="ScanSourceComboBox_SelectionChanged"/>
+                        <Grid Margin="0,7,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBox x:Name="ArchiveFolderTextBox"
+                                     IsReadOnly="True"
+                                     ToolTip="IMG archive folder"/>
+                            <Button x:Name="BrowseArchiveFolderButton"
+                                    Grid.Column="1"
+                                    Content="..."
+                                    Width="42"
+                                    MinHeight="30"
+                                    Padding="0"
+                                    Margin="6,0,0,0"
+                                    Style="{StaticResource ModernButton}"
+                                    Click="BrowseArchiveFolder_Click"/>
+                        </Grid>
+                        <CheckBox x:Name="InvertDirectionCheck" Content="Invert scan direction" Margin="0,4,0,0"/>
                     </StackPanel>
 
                     <UniformGrid Grid.Column="3" Columns="6" VerticalAlignment="Center">

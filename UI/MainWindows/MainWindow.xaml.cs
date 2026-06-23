@@ -3,7 +3,9 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Windows.Input;
 using System.Windows.Threading;
+using WinForms = System.Windows.Forms;
 using SEE_INSADE.UI.Dialogs;
 using SEE_INSADE.Core.Imaging;
 using SEE_INSADE.Core.Filters;
@@ -26,8 +28,14 @@ namespace SEE_INSADE.UI.MainWindows
         private WriteableBitmap _filteredBitmap = null!;
 
         private bool _isScanning = false;
+        private bool _isProjectionPanning = false;
+        private bool _projectionNeedsFit = true;
+        private bool _projectionFitWidth = true;
         private int _frameCount = 0;
+        private double _projectionZoom = 1.0;
         private DateTime _lastUpdate = DateTime.Now;
+        private Point _projectionPanStart;
+        private Point _projectionTranslateStart;
         private ScanDirection _requestedScanDirection = ScanDirection.Forward;
 
         private ImageProcessor _imageProcessor = null!;
@@ -46,6 +54,7 @@ namespace SEE_INSADE.UI.MainWindows
         {
             InitializeComponent();
             InitializeSystem();
+            Loaded += (_, _) => FitProjectionToWidth();
         }
 
         private void InitializeSystem()
@@ -77,6 +86,7 @@ namespace SEE_INSADE.UI.MainWindows
             _filteredBitmap = new WriteableBitmap(800, 400, 96, 96, PixelFormats.Bgr32, null);
 
             FilteredImage.Source = _filteredBitmap;
+            _projectionNeedsFit = true;
 
             _scanTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16) };
             _scanTimer.Tick += ScanTimer_Tick;
@@ -89,6 +99,7 @@ namespace SEE_INSADE.UI.MainWindows
             InitializePlugins();
             InitializeLanguages();
             InitializeOperatorFilters();
+            InitializeScanSources();
 
             UpdateAllDisplays(_scanService.GetCurrentScan());
             ApplyLocalization();
@@ -148,6 +159,28 @@ namespace SEE_INSADE.UI.MainWindows
 
             if (PluginComboBox.Items.Count > 0)
                 PluginComboBox.SelectedIndex = 0;
+        }
+
+        private void InitializeScanSources()
+        {
+            ScanSourceComboBox.ItemsSource = new[]
+            {
+                new ScanSourceOption(ScannerOperationMode.ArchivePlayback, "Архивные IMG"),
+                new ScanSourceOption(ScannerOperationMode.Nuctech6040D, "Nuctech 6040D")
+            };
+            ScanSourceComboBox.DisplayMemberPath = nameof(ScanSourceOption.Name);
+            ArchiveFolderTextBox.Text = _scanService.ArchiveScanFolder;
+
+            foreach (ScanSourceOption option in ScanSourceComboBox.Items)
+            {
+                if (option.Mode == _scanService.OperationMode)
+                {
+                    ScanSourceComboBox.SelectedItem = option;
+                    return;
+                }
+            }
+
+            ScanSourceComboBox.SelectedIndex = 0;
         }
 
         private void ScanTimer_Tick(object? sender, EventArgs e)
@@ -236,6 +269,14 @@ namespace SEE_INSADE.UI.MainWindows
                 ? option.Mode
                 : OperatorFilterMode.EnhancedColor;
 
+            if (mode == OperatorFilterMode.EnhancedColor && _scanService.OperationMode == ScannerOperationMode.ArchivePlayback)
+            {
+                _filteredBitmap = scanData.Image;
+                FilteredImage.Source = _filteredBitmap;
+                FitProjectionAfterFirstImage();
+                return;
+            }
+
             _filteredBitmap = _imageProcessor.CreateOperatorFilterView(
                 scanData.MaterialMap,
                 scanData.DensityMap,
@@ -255,6 +296,7 @@ namespace SEE_INSADE.UI.MainWindows
                 });
 
             FilteredImage.Source = _filteredBitmap;
+            FitProjectionAfterFirstImage();
         }
 
         private Color ApplyAllFilters(Color input, MaterialType material, double density)
@@ -317,7 +359,7 @@ namespace SEE_INSADE.UI.MainWindows
 
             FrameRateText.Text = $"FPS: {fps:0}";
             MemoryText.Text = $"Memory: {GC.GetTotalMemory(false) / 1024 / 1024} MB";
-            ProcessingText.Text = $"Processing: {(_isScanning ? GetEffectiveScanDirection().ToString() : "Idle")}";
+            ProcessingText.Text = $"Processing: {(_isScanning ? GetEffectiveScanDirection().ToString() : "Idle")} | {_scanService.SourceStatus}";
             FilterCountText.Text = $"Active Filters: {GetActiveFilterCount()}";
         }
 
@@ -416,6 +458,197 @@ namespace SEE_INSADE.UI.MainWindows
                 UpdateFilteredView(_scanService.GetCurrentScan());
 
             UpdateStatusKey("status.filtersApplied");
+        }
+
+        private void ScanSourceComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_scanService == null || ScanSourceComboBox?.SelectedItem is not ScanSourceOption option)
+                return;
+
+            _isScanning = false;
+            _scanTimer?.Stop();
+            _frameCount = 0;
+            _scanService.SetOperationMode(option.Mode);
+            UpdateArchiveFolderControls();
+            _projectionNeedsFit = true;
+            UpdateAllDisplays(_scanService.GetCurrentScan());
+            UpdateStatus($"Source: {option.Name}");
+        }
+
+        private void BrowseArchiveFolder_Click(object sender, RoutedEventArgs e)
+        {
+            using var dialog = new WinForms.FolderBrowserDialog
+            {
+                Description = "Select folder with Nuctech IMG scans",
+                UseDescriptionForTitle = true,
+                SelectedPath = string.IsNullOrWhiteSpace(_scanService.ArchiveScanFolder)
+                    ? Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory)
+                    : _scanService.ArchiveScanFolder,
+                ShowNewFolderButton = true
+            };
+
+            if (dialog.ShowDialog() != WinForms.DialogResult.OK)
+                return;
+
+            _isScanning = false;
+            _scanTimer?.Stop();
+            _frameCount = 0;
+            _scanService.SetArchiveScanFolder(dialog.SelectedPath);
+            ArchiveFolderTextBox.Text = dialog.SelectedPath;
+            _projectionNeedsFit = true;
+            UpdateAllDisplays(_scanService.GetCurrentScan());
+            UpdateStatus($"IMG folder: {dialog.SelectedPath}");
+        }
+
+        private void UpdateArchiveFolderControls()
+        {
+            bool archiveMode = _scanService.OperationMode == ScannerOperationMode.ArchivePlayback;
+
+            if (ArchiveFolderTextBox != null)
+            {
+                ArchiveFolderTextBox.Text = _scanService.ArchiveScanFolder;
+                ArchiveFolderTextBox.IsEnabled = archiveMode;
+            }
+
+            if (BrowseArchiveFolderButton != null)
+                BrowseArchiveFolderButton.IsEnabled = archiveMode;
+        }
+
+        private void FitProjectionAfterFirstImage()
+        {
+            if (!_projectionNeedsFit)
+                return;
+
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                if (_projectionFitWidth)
+                    FitProjectionToWidth();
+                else
+                    FitProjectionToHost();
+            }), DispatcherPriority.Loaded);
+        }
+
+        private void FitProjectionToHost()
+        {
+            if (ProjectionHost == null || FilteredImage.Source is not BitmapSource source)
+                return;
+
+            double hostWidth = Math.Max(1, ProjectionHost.ActualWidth);
+            double hostHeight = Math.Max(1, ProjectionHost.ActualHeight);
+
+            if (hostWidth <= 1 || hostHeight <= 1 || source.PixelWidth <= 0 || source.PixelHeight <= 0)
+                return;
+
+            _projectionZoom = Math.Clamp(
+                Math.Min(hostWidth / source.PixelWidth, hostHeight / source.PixelHeight),
+                0.05,
+                6.0);
+
+            ProjectionScaleTransform.ScaleX = _projectionZoom;
+            ProjectionScaleTransform.ScaleY = _projectionZoom;
+            ProjectionTranslateTransform.X = (hostWidth - source.PixelWidth * _projectionZoom) / 2.0;
+            ProjectionTranslateTransform.Y = (hostHeight - source.PixelHeight * _projectionZoom) / 2.0;
+            ZoomText.Text = $"{_projectionZoom * 100:0}%";
+            _projectionNeedsFit = false;
+        }
+
+        private void FitProjectionToWidth()
+        {
+            if (ProjectionHost == null || FilteredImage.Source is not BitmapSource source)
+                return;
+
+            double hostWidth = Math.Max(1, ProjectionHost.ActualWidth);
+            double hostHeight = Math.Max(1, ProjectionHost.ActualHeight);
+
+            if (hostWidth <= 1 || hostHeight <= 1 || source.PixelWidth <= 0 || source.PixelHeight <= 0)
+                return;
+
+            _projectionZoom = Math.Clamp(hostWidth / source.PixelWidth, 0.05, 20.0);
+
+            ProjectionScaleTransform.ScaleX = _projectionZoom;
+            ProjectionScaleTransform.ScaleY = _projectionZoom;
+            ProjectionTranslateTransform.X = 0;
+            ProjectionTranslateTransform.Y = (hostHeight - source.PixelHeight * _projectionZoom) / 2.0;
+            ZoomText.Text = $"{_projectionZoom * 100:0}%";
+            _projectionNeedsFit = false;
+        }
+
+        private void FitWidth_Click(object sender, RoutedEventArgs e)
+        {
+            _projectionFitWidth = true;
+            _projectionNeedsFit = true;
+            FitProjectionToWidth();
+        }
+
+        private void FitScreen_Click(object sender, RoutedEventArgs e)
+        {
+            _projectionFitWidth = false;
+            _projectionNeedsFit = true;
+            FitProjectionToHost();
+        }
+
+        private void ProjectionHost_MouseWheel(object sender, MouseWheelEventArgs e)
+        {
+            if (FilteredImage.Source is not BitmapSource)
+                return;
+
+            Point mouse = e.GetPosition(ProjectionHost);
+            double oldZoom = _projectionZoom;
+            double zoomFactor = e.Delta > 0 ? 1.15 : 1.0 / 1.15;
+            double newZoom = Math.Clamp(oldZoom * zoomFactor, 0.05, 20.0);
+
+            if (Math.Abs(newZoom - oldZoom) < 0.001)
+                return;
+
+            double imageX = (mouse.X - ProjectionTranslateTransform.X) / oldZoom;
+            double imageY = (mouse.Y - ProjectionTranslateTransform.Y) / oldZoom;
+
+            _projectionZoom = newZoom;
+            ProjectionScaleTransform.ScaleX = newZoom;
+            ProjectionScaleTransform.ScaleY = newZoom;
+            ProjectionTranslateTransform.X = mouse.X - imageX * newZoom;
+            ProjectionTranslateTransform.Y = mouse.Y - imageY * newZoom;
+            ZoomText.Text = $"{newZoom * 100:0}%";
+            e.Handled = true;
+        }
+
+        private void ProjectionHost_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            _isProjectionPanning = true;
+            _projectionPanStart = e.GetPosition(ProjectionHost);
+            _projectionTranslateStart = new Point(ProjectionTranslateTransform.X, ProjectionTranslateTransform.Y);
+            ProjectionHost.CaptureMouse();
+            ProjectionHost.Cursor = Cursors.SizeAll;
+            e.Handled = true;
+        }
+
+        private void ProjectionHost_MouseMove(object sender, System.Windows.Input.MouseEventArgs e)
+        {
+            if (!_isProjectionPanning)
+                return;
+
+            Point current = e.GetPosition(ProjectionHost);
+            ProjectionTranslateTransform.X = _projectionTranslateStart.X + current.X - _projectionPanStart.X;
+            ProjectionTranslateTransform.Y = _projectionTranslateStart.Y + current.Y - _projectionPanStart.Y;
+            e.Handled = true;
+        }
+
+        private void ProjectionHost_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+        {
+            _isProjectionPanning = false;
+            ProjectionHost.ReleaseMouseCapture();
+            ProjectionHost.Cursor = Cursors.Cross;
+            e.Handled = true;
+        }
+
+        private void ProjectionHost_MouseRightButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            _projectionNeedsFit = true;
+            if (_projectionFitWidth)
+                FitProjectionToWidth();
+            else
+                FitProjectionToHost();
+            e.Handled = true;
         }
 
         private void OperatorFilter_Changed(object sender, RoutedEventArgs e)
@@ -779,6 +1012,18 @@ namespace SEE_INSADE.UI.MainWindows
             }
 
             public OperatorFilterMode Mode { get; }
+            public string Name { get; }
+        }
+
+        private sealed class ScanSourceOption
+        {
+            public ScanSourceOption(ScannerOperationMode mode, string name)
+            {
+                Mode = mode;
+                Name = name;
+            }
+
+            public ScannerOperationMode Mode { get; }
             public string Name { get; }
         }
     }

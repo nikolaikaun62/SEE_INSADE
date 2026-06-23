@@ -1,0 +1,1 @@
+version=TOD_CX6040D_B07_lidaV1.0.1wrz_edaV1.0.0wrz_weknow_20221101.exe

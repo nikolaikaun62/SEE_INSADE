@@ -1,8 +1,11 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 using System.Windows;
 using System.Windows.Media.Imaging;
 using SEE_INSADE.Core.Config;
+using SEE_INSADE.Core.Raw;
 
 namespace SEE_INSADE.Services.Scanning
 {
@@ -10,6 +13,12 @@ namespace SEE_INSADE.Services.Scanning
     {
         Forward,
         Backward
+    }
+
+    public enum ScannerOperationMode
+    {
+        ArchivePlayback,
+        Nuctech6040D
     }
 
     public class ScanService
@@ -24,18 +33,59 @@ namespace SEE_INSADE.Services.Scanning
 
         private readonly Random _random;
         private readonly List<ScanObject> _objects = new();
+        private readonly INuctech6040DDetectorConnection _nuctechConnection;
         private ScanData _currentScan = null!;
+        private readonly List<string> _archiveScanFiles = new();
+        private NuctechImgScan? _archiveScan;
+        private byte[] _archivePixels = Array.Empty<byte>();
+        private int _archiveScanIndex;
+        private int _archiveColumn;
+        private string _archiveScanFolder;
         private double _beltPosition;
         private int _capturedColumns;
+
+        public ScannerOperationMode OperationMode { get; private set; } = ScannerOperationMode.ArchivePlayback;
+        public string SourceStatus { get; private set; } = "Archive scan playback";
+        public string ArchiveScanFolder => _archiveScanFolder;
 
         public ScanService()
         {
             _random = new Random();
+            _nuctechConnection = new Nuctech6040DDetectorConnection();
+            _archiveScanFolder = ConfigManager.Current.ScanSettings.ArchiveScanFolder;
+            if (Enum.TryParse(ConfigManager.Current.ScanSettings.OperationMode, out ScannerOperationMode mode))
+                OperationMode = mode;
+            ResetScan();
+        }
+
+        public void SetOperationMode(ScannerOperationMode mode)
+        {
+            if (OperationMode == mode)
+                return;
+
+            OperationMode = mode;
+            ConfigManager.Current.ScanSettings.OperationMode = mode.ToString();
+            ConfigManager.Save();
+            ResetScan();
+        }
+
+        public void SetArchiveScanFolder(string folder)
+        {
+            if (string.IsNullOrWhiteSpace(folder))
+                return;
+
+            _archiveScanFolder = folder;
+            ConfigManager.Current.ScanSettings.ArchiveScanFolder = folder;
+            ConfigManager.Save();
+            ResetArchivePlayback();
             ResetScan();
         }
 
         public void ResetScan()
         {
+            if (OperationMode == ScannerOperationMode.ArchivePlayback && TryResetArchiveScan())
+                return;
+
             var config = ConfigManager.Current.ScanSettings;
             int width = config.Width;
             int height = config.Height;
@@ -60,6 +110,9 @@ namespace SEE_INSADE.Services.Scanning
             _beltPosition = 0;
             _capturedColumns = 0;
             _currentScan.ObjectCount = _objects.Count;
+            SourceStatus = OperationMode == ScannerOperationMode.Nuctech6040D
+                ? "Nuctech 6040D real detector mode: waiting for detector driver"
+                : "Synthetic fallback: archive scans were not found";
         }
 
         public void UpdateScan(double speed = 1.0)
@@ -69,6 +122,18 @@ namespace SEE_INSADE.Services.Scanning
 
         public void UpdateScan(double speed, ScanDirection direction)
         {
+            if (OperationMode == ScannerOperationMode.ArchivePlayback && _archiveScan != null)
+            {
+                UpdateArchivePlayback(speed, direction);
+                return;
+            }
+
+            if (OperationMode == ScannerOperationMode.Nuctech6040D)
+            {
+                UpdateRealNuctech6040D();
+                return;
+            }
+
             var config = ConfigManager.Current.ScanSettings;
             double beltStep = Math.Max(0.1, speed) * config.Speed;
             double sceneLength = config.Width + 300;
@@ -103,6 +168,261 @@ namespace SEE_INSADE.Services.Scanning
             }
 
             _capturedColumns++;
+        }
+
+        private bool TryResetArchiveScan()
+        {
+            ResetArchivePlayback();
+
+            if (!LoadArchiveScanAtCurrentIndex())
+                return false;
+
+            int width = _archiveScan!.Width;
+            int height = _archiveScan.Height;
+
+            _currentScan = new ScanData
+            {
+                Image = CreateBlankBitmap(width, height, 255),
+                MaterialMap = new MaterialType[width, height],
+                DensityMap = new double[width, height],
+                ScanPosition = 0,
+                ObjectCount = 1,
+                DetectorData = new DetectorInfo[height],
+                ScanLines = new ScanLineData[width]
+            };
+
+            InitializeOutputMaps();
+            InitializeDetectors(height, height);
+            InitializeScanColumns(width);
+
+            _beltPosition = 0;
+            _capturedColumns = 0;
+            _archiveColumn = 0;
+            SourceStatus = $"Archive scan: {_archiveScan.FileName}";
+            return true;
+        }
+
+        private void ResetArchivePlayback()
+        {
+            _archiveScanFiles.Clear();
+
+            if (Directory.Exists(_archiveScanFolder))
+            {
+                _archiveScanFiles.AddRange(
+                    Directory.EnumerateFiles(_archiveScanFolder, "*.img", SearchOption.TopDirectoryOnly)
+                        .OrderBy(path => path, StringComparer.OrdinalIgnoreCase));
+            }
+
+            _archiveScanIndex = 0;
+            _archiveScan = null;
+            _archiveColumn = 0;
+        }
+
+        private bool LoadArchiveScanAtCurrentIndex()
+        {
+            if (_archiveScanFiles.Count == 0)
+                return false;
+
+            for (int attempts = 0; attempts < _archiveScanFiles.Count; attempts++)
+            {
+                string path = _archiveScanFiles[_archiveScanIndex % _archiveScanFiles.Count];
+                _archiveScanIndex = (_archiveScanIndex + 1) % _archiveScanFiles.Count;
+
+                try
+                {
+                    _archiveScan = NuctechImgDecoder.Decode(
+                        path,
+                        detectorHeight: 0,
+                        manualOffset: -1,
+                        rotate90Clockwise: false,
+                        flipHorizontal: false,
+                        flipVertical: false);
+
+                    _archivePixels = new byte[_archiveScan.Width * _archiveScan.Height * 4];
+                    _archiveScan.Bitmap.CopyPixels(_archivePixels, _archiveScan.Width * 4, 0);
+                    _archiveColumn = 0;
+                    SourceStatus = $"Archive scan: {_archiveScan.FileName}";
+                    return true;
+                }
+                catch
+                {
+                    _archiveScan = null;
+                }
+            }
+
+            return false;
+        }
+
+        private void UpdateArchivePlayback(double speed, ScanDirection direction)
+        {
+            if (_archiveScan == null)
+                return;
+
+            int step = Math.Max(1, (int)Math.Round(Math.Max(0.1, speed) * ConfigManager.Current.ScanSettings.Speed));
+
+            for (int i = 0; i < step; i++)
+            {
+                if (_archiveColumn >= _archiveScan.Width)
+                {
+                    if (!LoadArchiveScanAtCurrentIndex())
+                        return;
+
+                    ResizeCurrentScanIfNeeded(_archiveScan.Width, _archiveScan.Height);
+                }
+
+                if (direction == ScanDirection.Forward)
+                {
+                    ShiftScanBufferRight(fillWhite: true);
+                    AcquireArchiveColumn(0, _archiveColumn);
+                }
+                else
+                {
+                    ShiftScanBufferLeft(fillWhite: true);
+                    AcquireArchiveColumn(_currentScan.Image.PixelWidth - 1, _archiveColumn);
+                }
+
+                _archiveColumn++;
+                _beltPosition = _archiveColumn;
+                _currentScan.ScanPosition = _beltPosition;
+                _capturedColumns++;
+            }
+        }
+
+        private void ResizeCurrentScanIfNeeded(int width, int height)
+        {
+            if (_currentScan.Image.PixelWidth == width && _currentScan.Image.PixelHeight == height)
+                return;
+
+            _currentScan = new ScanData
+            {
+                Image = CreateBlankBitmap(width, height, 255),
+                MaterialMap = new MaterialType[width, height],
+                DensityMap = new double[width, height],
+                ScanPosition = 0,
+                ObjectCount = 1,
+                DetectorData = new DetectorInfo[height],
+                ScanLines = new ScanLineData[width]
+            };
+
+            InitializeOutputMaps();
+            InitializeDetectors(height, height);
+            InitializeScanColumns(width);
+            _capturedColumns = 0;
+        }
+
+        private void AcquireArchiveColumn(int outputX, int sourceX)
+        {
+            if (_archiveScan == null || outputX < 0 || outputX >= _currentScan.Image.PixelWidth)
+                return;
+
+            if (sourceX < 0 || sourceX >= _archiveScan.Width)
+                return;
+
+            byte[] columnPixels = new byte[_archiveScan.Height * 4];
+
+            for (int y = 0; y < _archiveScan.Height; y++)
+            {
+                int src = (y * _archiveScan.Width + sourceX) * 4;
+                int dst = y * 4;
+
+                columnPixels[dst] = _archivePixels[src];
+                columnPixels[dst + 1] = _archivePixels[src + 1];
+                columnPixels[dst + 2] = _archivePixels[src + 2];
+                columnPixels[dst + 3] = 255;
+
+                MaterialType material = _archiveScan.MaterialMap[sourceX, y];
+                double density = _archiveScan.DensityMap[sourceX, y];
+                _currentScan.MaterialMap[outputX, y] = material;
+                _currentScan.DensityMap[outputX, y] = density;
+
+                if (y < _currentScan.DetectorData.Length)
+                {
+                    double signal = Math.Clamp(1.0 - density / 2.35, 0.0001, 1.0);
+                    var detector = _currentScan.DetectorData[y];
+                    detector.CurrentReading = signal;
+                    detector.LowEnergyReading = signal;
+                    detector.HighEnergyReading = signal;
+                    detector.DetectedMaterial = material;
+                    detector.EstimatedZ = GetEffectiveAtomicNumber(material);
+                    detector.AttenuationRatio = 1.0;
+                }
+            }
+
+            _currentScan.ScanLines[outputX] = new ScanLineData
+            {
+                LineNumber = outputX,
+                IsScanned = true,
+                Timestamp = DateTime.Now
+            };
+
+            _currentScan.Image.WritePixels(
+                new Int32Rect(outputX, 0, 1, _archiveScan.Height),
+                columnPixels,
+                4,
+                0);
+        }
+
+        private void UpdateRealNuctech6040D()
+        {
+            if (!_nuctechConnection.IsConnected && !_nuctechConnection.TryConnect())
+            {
+                SourceStatus = _nuctechConnection.Status;
+                return;
+            }
+
+            if (!_nuctechConnection.TryReadLine(out NuctechDetectorLine line))
+            {
+                SourceStatus = _nuctechConnection.Status;
+                return;
+            }
+
+            AcquireRealDetectorLine(line);
+            _currentScan.ScanPosition = _beltPosition;
+        }
+
+        private void AcquireRealDetectorLine(NuctechDetectorLine line)
+        {
+            int detectorCount = Math.Min(_currentScan.DetectorData.Length, Math.Min(line.LowEnergy.Length, line.HighEnergy.Length));
+            if (detectorCount <= 0)
+                return;
+
+            ShiftScanBufferRight(fillWhite: true);
+
+            byte[] pixels = new byte[_currentScan.Image.PixelHeight * 4];
+            for (int y = 0; y < detectorCount; y++)
+            {
+                var detector = _currentScan.DetectorData[y];
+                double low = Math.Clamp(line.LowEnergy[y], MinSignal, 1.0);
+                double high = Math.Clamp(line.HighEnergy[y], MinSignal, 1.0);
+                double lowAbsorbance = -Math.Log(low);
+                double highAbsorbance = -Math.Log(high);
+                double ratio = highAbsorbance > 0.00001 ? lowAbsorbance / highAbsorbance : 1.0;
+                double estimatedZ = EstimateEffectiveAtomicNumber(ratio);
+                MaterialType material = ClassifyMaterial(estimatedZ, highAbsorbance);
+                double density = Math.Clamp(highAbsorbance, 0, 2.35);
+
+                detector.LowEnergyReading = low;
+                detector.HighEnergyReading = high;
+                detector.CurrentReading = 0.62 * low + 0.38 * high;
+                detector.AttenuationRatio = ratio;
+                detector.EstimatedZ = estimatedZ;
+                detector.DetectedMaterial = material;
+
+                _currentScan.MaterialMap[0, y] = material;
+                _currentScan.DensityMap[0, y] = density;
+
+                byte intensity = ToXrayIntensity(detector.CurrentReading);
+                int index = y * 4;
+                pixels[index] = intensity;
+                pixels[index + 1] = intensity;
+                pixels[index + 2] = intensity;
+                pixels[index + 3] = 255;
+            }
+
+            _currentScan.Image.WritePixels(new Int32Rect(0, 0, 1, _currentScan.Image.PixelHeight), pixels, 4, 0);
+            _capturedColumns++;
+            _beltPosition++;
+            SourceStatus = "Nuctech 6040D detector line acquired";
         }
 
         private void RestartVisualScan()
@@ -157,7 +477,7 @@ namespace SEE_INSADE.Services.Scanning
                 0);
         }
 
-        private void ShiftScanBufferRight()
+        private void ShiftScanBufferRight(bool fillWhite = false)
         {
             int width = _currentScan.Image.PixelWidth;
             int height = _currentScan.Image.PixelHeight;
@@ -176,9 +496,10 @@ namespace SEE_INSADE.Services.Scanning
 
                 Buffer.BlockCopy(pixels, rowStart, pixels, rowStart + 4, (width - 1) * 4);
 
-                pixels[rowStart] = 0;
-                pixels[rowStart + 1] = 0;
-                pixels[rowStart + 2] = 0;
+                byte fill = fillWhite ? (byte)255 : (byte)0;
+                pixels[rowStart] = fill;
+                pixels[rowStart + 1] = fill;
+                pixels[rowStart + 2] = fill;
                 pixels[rowStart + 3] = 255;
             }
 
@@ -210,7 +531,7 @@ namespace SEE_INSADE.Services.Scanning
             _currentScan.Image.WritePixels(new Int32Rect(0, 0, width, height), pixels, rowStride, 0);
         }
 
-        private void ShiftScanBufferLeft()
+        private void ShiftScanBufferLeft(bool fillWhite = false)
         {
             int width = _currentScan.Image.PixelWidth;
             int height = _currentScan.Image.PixelHeight;
@@ -230,9 +551,10 @@ namespace SEE_INSADE.Services.Scanning
                 Buffer.BlockCopy(pixels, rowStart + 4, pixels, rowStart, shiftedBytes);
 
                 int lastPixel = rowStart + shiftedBytes;
-                pixels[lastPixel] = 0;
-                pixels[lastPixel + 1] = 0;
-                pixels[lastPixel + 2] = 0;
+                byte fill = fillWhite ? (byte)255 : (byte)0;
+                pixels[lastPixel] = fill;
+                pixels[lastPixel + 1] = fill;
+                pixels[lastPixel + 2] = fill;
                 pixels[lastPixel + 3] = 255;
             }
 
@@ -924,7 +1246,7 @@ namespace SEE_INSADE.Services.Scanning
 
         public int GetCurrentScanLine() => Math.Min(_capturedColumns, _currentScan.Image.PixelWidth);
 
-        private WriteableBitmap CreateBlankBitmap(int width, int height)
+        private WriteableBitmap CreateBlankBitmap(int width, int height, byte fill = 0)
         {
             var bitmap = new WriteableBitmap(width, height, 96, 96, System.Windows.Media.PixelFormats.Bgr32, null);
 
@@ -932,9 +1254,9 @@ namespace SEE_INSADE.Services.Scanning
 
             for (int i = 0; i < blackPixels.Length; i += 4)
             {
-                blackPixels[i] = 0;
-                blackPixels[i + 1] = 0;
-                blackPixels[i + 2] = 0;
+                blackPixels[i] = fill;
+                blackPixels[i + 1] = fill;
+                blackPixels[i + 2] = fill;
                 blackPixels[i + 3] = 255;
             }
 

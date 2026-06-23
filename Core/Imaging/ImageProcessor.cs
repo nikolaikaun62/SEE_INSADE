@@ -1,5 +1,8 @@
+﻿using SEE_INSADE.Core.Config;
 using SEE_INSADE.Core.Filters;
+using SEE_INSADE.Core.Imaging.Gpu;
 using System;
+using System.Threading.Tasks;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 
@@ -8,11 +11,18 @@ namespace SEE_INSADE.Core.Imaging
     public class ImageProcessor
     {
         private FilterPipeline _filterPipeline;
+        private readonly GpuImageProcessor _gpuImageProcessor;
 
         public ImageProcessor()
         {
             _filterPipeline = new FilterPipeline();
+            _gpuImageProcessor = new GpuImageProcessor();
         }
+
+        public bool UseGpuAcceleration { get; set; }
+        public bool IsGpuAvailable => _gpuImageProcessor.IsAvailable;
+        public string LastRenderBackend { get; private set; } = "CPU";
+        public string GpuStatus => _gpuImageProcessor.StatusText;
 
         public WriteableBitmap ProcessImage(WriteableBitmap source, MaterialType[,] materialMap, double[,] densityMap)
         {
@@ -21,7 +31,7 @@ namespace SEE_INSADE.Core.Imaging
             var result = new WriteableBitmap(width, height, 96, 96, PixelFormats.Bgr32, null);
             byte[] pixels = new byte[width * height * 4];
 
-            for (int y = 0; y < height; y++)
+            Parallel.For(0, height, y =>
             {
                 for (int x = 0; x < width; x++)
                 {
@@ -36,7 +46,7 @@ namespace SEE_INSADE.Core.Imaging
                     pixels[index + 2] = filteredColor.R;
                     pixels[index + 3] = 255;
                 }
-            }
+            });
 
             result.WritePixels(new System.Windows.Int32Rect(0, 0, width, height), pixels, width * 4, 0);
             return result;
@@ -66,7 +76,7 @@ namespace SEE_INSADE.Core.Imaging
             var bitmap = new WriteableBitmap(width, height, 96, 96, PixelFormats.Bgr32, null);
             byte[] pixels = new byte[width * height * 4];
 
-            for (int y = 0; y < height; y++)
+            Parallel.For(0, height, y =>
             {
                 for (int x = 0; x < width; x++)
                 {
@@ -78,7 +88,7 @@ namespace SEE_INSADE.Core.Imaging
                     pixels[index + 2] = color.R;
                     pixels[index + 3] = 255;
                 }
-            }
+            });
 
             bitmap.WritePixels(new System.Windows.Int32Rect(0, 0, width, height), pixels, width * 4, 0);
             return bitmap;
@@ -89,7 +99,7 @@ namespace SEE_INSADE.Core.Imaging
             var bitmap = new WriteableBitmap(width, height, 96, 96, PixelFormats.Bgr32, null);
             byte[] pixels = new byte[width * height * 4];
 
-            for (int y = 0; y < height; y++)
+            Parallel.For(0, height, y =>
             {
                 for (int x = 0; x < width; x++)
                 {
@@ -103,7 +113,7 @@ namespace SEE_INSADE.Core.Imaging
                     pixels[index + 2] = color.R;
                     pixels[index + 3] = 255;
                 }
-            }
+            });
 
             bitmap.WritePixels(new System.Windows.Int32Rect(0, 0, width, height), pixels, width * 4, 0);
             return bitmap;
@@ -116,11 +126,36 @@ namespace SEE_INSADE.Core.Imaging
             int height,
             OperatorFilterSettings settings)
         {
+            bool gpuEnabled = UseGpuAcceleration || ConfigManager.Current.DisplaySettings.UseGpuAcceleration;
+
+            if (gpuEnabled && _gpuImageProcessor.TryCreateOperatorFilterView(
+                    materialMap,
+                    densityMap,
+                    width,
+                    height,
+                    settings,
+                    out WriteableBitmap? gpuBitmap))
+            {
+                LastRenderBackend = "GPU";
+                return gpuBitmap;
+            }
+
+            LastRenderBackend = gpuEnabled ? "CPU fallback" : "CPU";
+            return CreateOperatorFilterViewCpu(materialMap, densityMap, width, height, settings);
+        }
+
+        private WriteableBitmap CreateOperatorFilterViewCpu(
+            MaterialType[,] materialMap,
+            double[,] densityMap,
+            int width,
+            int height,
+            OperatorFilterSettings settings)
+        {
             var bitmap = new WriteableBitmap(width, height, 96, 96, PixelFormats.Bgr32, null);
             byte[] pixels = new byte[width * height * 4];
             double intensity = Math.Clamp(settings.Strength, 0.1, 3.0);
 
-            for (int y = 0; y < height; y++)
+            Parallel.For(0, height, y =>
             {
                 for (int x = 0; x < width; x++)
                 {
@@ -135,7 +170,7 @@ namespace SEE_INSADE.Core.Imaging
                     pixels[index + 2] = color.R;
                     pixels[index + 3] = 255;
                 }
-            }
+            });
 
             bitmap.WritePixels(new System.Windows.Int32Rect(0, 0, width, height), pixels, width * 4, 0);
             return bitmap;
@@ -421,7 +456,7 @@ namespace SEE_INSADE.Core.Imaging
             return _filterPipeline.GetActiveFiltersCount();
         }
 
-        private static T GetMapValue<T>(T[,] map, int x, int y, T fallback)
+        private static T GetMapValue<T>(T[,] map, int x, int y, T fallback) where T : notnull
         {
             if (x < 0 || y < 0 || x >= map.GetLength(0) || y >= map.GetLength(1))
                 return fallback;

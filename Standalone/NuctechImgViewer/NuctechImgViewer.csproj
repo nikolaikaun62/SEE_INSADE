@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\SEE_INSADE.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\..\Plugins\NuctechImg\NativeRuntime\**\*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>Plugins\NuctechImg\NativeRuntime\%(RecursiveDir)%(Filename)%(Extension)</Link>
+    </None>
+  </ItemGroup>
+
+  <Target Name="BuildOisImgNativeDecodeHelperForStandalone" AfterTargets="Build">
+    <MSBuild
+      Projects="..\..\Tools\OisImgNativeDecodeHelper\OisImgNativeDecodeHelper.csproj"
+      Targets="Restore;Build"
+      Properties="Configuration=$(Configuration)" />
+    <ItemGroup>
+      <OisImgNativeDecodeHelperFiles Include="..\..\Tools\OisImgNativeDecodeHelper\bin\$(Configuration)\net8.0-windows\win-x86\**\*" />
+    </ItemGroup>
+    <Copy
+      SourceFiles="@(OisImgNativeDecodeHelperFiles)"
+      DestinationFiles="@(OisImgNativeDecodeHelperFiles->'$(OutputPath)Tools\OisImgNativeDecodeHelper\%(RecursiveDir)%(Filename)%(Extension)')"
+      SkipUnchangedFiles="true" />
+  </Target>
+</Project>

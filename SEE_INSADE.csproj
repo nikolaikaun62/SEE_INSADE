@@ -4,10 +4,13 @@
 		<OutputType>WinExe</OutputType>
 		<TargetFramework>net8.0-windows</TargetFramework>
 		<UseWPF>true</UseWPF>
+		<UseWindowsForms>true</UseWindowsForms>
 		<Nullable>enable</Nullable>
+		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 	</PropertyGroup>
 
 	<ItemGroup>
+	  <PackageReference Include="ComputeSharp" Version="3.2.0" />
 	  <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.0">
 	    <PrivateAssets>all</PrivateAssets>
 	    <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
@@ -18,9 +21,33 @@
 	</ItemGroup>
 
 	<ItemGroup>
+	  <Compile Remove="Tools\OisImgNativeDecodeHelper\**\*.cs" />
+	  <Compile Remove="Standalone\**\*.cs" />
+	  <Page Remove="Standalone\**\*.xaml" />
+	  <ApplicationDefinition Remove="Standalone\**\App.xaml" />
+	</ItemGroup>
+
+	<ItemGroup>
 	  <None Update="Languages\*.json">
 	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 	  </None>
+	  <None Include="Plugins\NuctechImg\NativeRuntime\**\*">
+	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	  </None>
 	</ItemGroup>
+
+	<Target Name="BuildOisImgNativeDecodeHelper" AfterTargets="Build">
+	  <MSBuild
+	    Projects="Tools\OisImgNativeDecodeHelper\OisImgNativeDecodeHelper.csproj"
+	    Targets="Restore;Build"
+	    Properties="Configuration=$(Configuration)" />
+	  <ItemGroup>
+	    <OisImgNativeDecodeHelperFiles Include="Tools\OisImgNativeDecodeHelper\bin\$(Configuration)\net8.0-windows\win-x86\**\*" />
+	  </ItemGroup>
+	  <Copy
+	    SourceFiles="@(OisImgNativeDecodeHelperFiles)"
+	    DestinationFiles="@(OisImgNativeDecodeHelperFiles->'$(OutputPath)Tools\OisImgNativeDecodeHelper\%(RecursiveDir)%(Filename)%(Extension)')"
+	    SkipUnchangedFiles="true" />
+	</Target>
 
 </Project>
