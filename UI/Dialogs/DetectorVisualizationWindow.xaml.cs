@@ -502,6 +502,10 @@ namespace SEE_INSADE.UI.Dialogs
                 SelectedDetectorSensitivity.Text = $"Sensitivity: {detector.Sensitivity:F2}";
             if (SelectedDetectorReading != null)
                 SelectedDetectorReading.Text = $"Reading: {detector.CurrentReading:F3}";
+            if (SelectedDetectorDualEnergy != null)
+                SelectedDetectorDualEnergy.Text = $"Low/High: {detector.LowEnergyReading:F3}/{detector.HighEnergyReading:F3}  R: {detector.AttenuationRatio:F2}";
+            if (SelectedDetectorMaterial != null)
+                SelectedDetectorMaterial.Text = $"Zeff: {detector.EstimatedZ:F1}  Material: {detector.DetectedMaterial}";
         }
 
         private void TestAllDetectors_Click(object sender, RoutedEventArgs e)

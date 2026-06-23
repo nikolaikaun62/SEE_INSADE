@@ -87,6 +87,8 @@
                                 <TextBlock x:Name="SelectedDetectorHealth" Text="Health: --" Foreground="#FF94A3B8" FontSize="10"/>
                                 <TextBlock x:Name="SelectedDetectorSensitivity" Text="Sensitivity: --" Foreground="#FF94A3B8" FontSize="10"/>
                                 <TextBlock x:Name="SelectedDetectorReading" Text="Reading: --" Foreground="#FF94A3B8" FontSize="10"/>
+                                <TextBlock x:Name="SelectedDetectorDualEnergy" Text="Low/High: --" Foreground="#FF94A3B8" FontSize="10"/>
+                                <TextBlock x:Name="SelectedDetectorMaterial" Text="Material: --" Foreground="#FF94A3B8" FontSize="10"/>
                             </StackPanel>
                         </Border>
 

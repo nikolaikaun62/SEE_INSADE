@@ -10,8 +10,11 @@ namespace SEE_INSADE.Services.Scanning
     {
         private const double BeamX = 0.0;
         private const double AirDensity = 0.01;
-        private const double RayPathScale = 0.18;
+        private const double LowEnergyKev = 80.0;
+        private const double HighEnergyKev = 160.0;
+        private const double RayPathScale = 1.0;
         private const double NoiseAmplitude = 0.012;
+        private const double MinSignal = 0.0001;
 
         private readonly Random _random;
         private readonly List<ScanObject> _objects = new();
@@ -92,13 +95,19 @@ namespace SEE_INSADE.Services.Scanning
                 int y = detectorIndex;
 
                 var sample = SampleSceneAtDetector(beltPosition, y);
-                double reading = GetDetectorReading(sample.Material, sample.Density, detector);
-                detector.CurrentReading = reading;
+                var measurement = MeasureDualEnergy(sample.Material, sample.Density, detector);
 
-                _currentScan.MaterialMap[outputX, y] = sample.Material;
-                _currentScan.DensityMap[outputX, y] = sample.Density;
+                detector.CurrentReading = measurement.DisplaySignal;
+                detector.LowEnergyReading = measurement.LowEnergySignal;
+                detector.HighEnergyReading = measurement.HighEnergySignal;
+                detector.AttenuationRatio = measurement.AttenuationRatio;
+                detector.EstimatedZ = measurement.EstimatedZ;
+                detector.DetectedMaterial = measurement.DetectedMaterial;
 
-                byte intensity = ToXrayIntensity(reading);
+                _currentScan.MaterialMap[outputX, y] = measurement.DetectedMaterial;
+                _currentScan.DensityMap[outputX, y] = measurement.ArealDensity;
+
+                byte intensity = ToXrayIntensity(measurement.DisplaySignal);
                 int index = y * 4;
                 pixels[index] = intensity;
                 pixels[index + 1] = intensity;
@@ -185,31 +194,100 @@ namespace SEE_INSADE.Services.Scanning
             return new SceneSample(MaterialType.Air, AirDensity);
         }
 
-        private double GetDetectorReading(MaterialType material, double density, DetectorInfo detector)
+        private DualEnergyMeasurement MeasureDualEnergy(MaterialType material, double arealDensity, DetectorInfo detector)
         {
-            double attenuation = GetMaterialAttenuation(material, density);
-            double transmittedIntensity = Math.Exp(-attenuation * RayPathScale);
-            double calibratedReading = transmittedIntensity * detector.Sensitivity;
-            calibratedReading += (_random.NextDouble() - 0.5) * NoiseAmplitude;
+            double trueZ = GetEffectiveAtomicNumber(material);
+            double lowMu = GetMassAttenuation(LowEnergyKev, trueZ);
+            double highMu = GetMassAttenuation(HighEnergyKev, trueZ);
 
-            return Math.Clamp(calibratedReading, 0, 1);
+            double lowSignal = Transmit(lowMu, arealDensity, detector);
+            double highSignal = Transmit(highMu, arealDensity, detector);
+
+            double lowAbsorbance = -Math.Log(Math.Clamp(lowSignal / detector.Sensitivity, MinSignal, 1.0));
+            double highAbsorbance = -Math.Log(Math.Clamp(highSignal / detector.Sensitivity, MinSignal, 1.0));
+            double attenuationRatio = highAbsorbance > 0.00001 ? lowAbsorbance / highAbsorbance : 1.0;
+            double estimatedZ = EstimateEffectiveAtomicNumber(attenuationRatio);
+            MaterialType detectedMaterial = ClassifyMaterial(estimatedZ, highAbsorbance);
+
+            return new DualEnergyMeasurement(
+                LowEnergySignal: lowSignal,
+                HighEnergySignal: highSignal,
+                DisplaySignal: 0.62 * lowSignal + 0.38 * highSignal,
+                AttenuationRatio: attenuationRatio,
+                EstimatedZ: estimatedZ,
+                ArealDensity: Math.Clamp(highAbsorbance / Math.Max(highMu, 0.00001), 0, 1.5),
+                DetectedMaterial: detectedMaterial);
         }
 
-        private double GetMaterialAttenuation(MaterialType material, double density)
+        private double Transmit(double attenuationCoefficient, double arealDensity, DetectorInfo detector)
+        {
+            double signal = Math.Exp(-attenuationCoefficient * arealDensity * RayPathScale) * detector.Sensitivity;
+            signal += (_random.NextDouble() - 0.5) * NoiseAmplitude;
+            return Math.Clamp(signal, MinSignal, 1.0);
+        }
+
+        private double GetMassAttenuation(double energyKev, double effectiveZ)
+        {
+            double normalizedEnergy = energyKev / 100.0;
+            double comptonTerm = 0.26;
+            double photoElectricTerm = 0.0024 * Math.Pow(effectiveZ, 3.15) / Math.Pow(normalizedEnergy, 3.0);
+
+            return comptonTerm + photoElectricTerm;
+        }
+
+        private double EstimateEffectiveAtomicNumber(double attenuationRatio)
+        {
+            double bestZ = 7.0;
+            double bestError = double.MaxValue;
+
+            for (double z = 5.0; z <= 32.0; z += 0.1)
+            {
+                double modelRatio = GetMassAttenuation(LowEnergyKev, z) / GetMassAttenuation(HighEnergyKev, z);
+                double error = Math.Abs(modelRatio - attenuationRatio);
+
+                if (error < bestError)
+                {
+                    bestError = error;
+                    bestZ = z;
+                }
+            }
+
+            return bestZ;
+        }
+
+        private MaterialType ClassifyMaterial(double estimatedZ, double highAbsorbance)
+        {
+            if (highAbsorbance < 0.015)
+                return MaterialType.Air;
+
+            return estimatedZ switch
+            {
+                < 7.2 => MaterialType.Organic,
+                < 8.8 => MaterialType.Plastic,
+                < 11.5 => MaterialType.Liquid,
+                < 14.5 => MaterialType.Inorganic,
+                < 17.0 => MaterialType.Glass,
+                < 22.0 => MaterialType.LightMetal,
+                < 28.0 => MaterialType.Electronics,
+                _ => MaterialType.HeavyMetal
+            };
+        }
+
+        private double GetEffectiveAtomicNumber(MaterialType material)
         {
             return material switch
             {
-                MaterialType.Air => 0.01 * density,
-                MaterialType.Organic => 0.50 * density,
-                MaterialType.Inorganic => 1.00 * density,
-                MaterialType.Plastic => 0.70 * density,
-                MaterialType.Glass => 1.10 * density,
-                MaterialType.Liquid => 0.35 * density,
-                MaterialType.LightMetal => 1.80 * density,
-                MaterialType.HeavyMetal => 5.50 * density,
-                MaterialType.Electronics => 3.20 * density,
-                MaterialType.Mixed => 2.20 * density,
-                _ => 0.10 * density
+                MaterialType.Air => 7.3,
+                MaterialType.Organic => 6.4,
+                MaterialType.Plastic => 7.8,
+                MaterialType.Liquid => 9.5,
+                MaterialType.Inorganic => 12.5,
+                MaterialType.Glass => 15.0,
+                MaterialType.LightMetal => 18.0,
+                MaterialType.Electronics => 23.0,
+                MaterialType.HeavyMetal => 30.0,
+                MaterialType.Mixed => 16.5,
+                _ => 10.0
             };
         }
 
@@ -229,6 +307,11 @@ namespace SEE_INSADE.Services.Scanning
                     IsActive = true,
                     Sensitivity = 0.96 + (_random.NextDouble() * 0.08),
                     CurrentReading = 1.0,
+                    LowEnergyReading = 1.0,
+                    HighEnergyReading = 1.0,
+                    AttenuationRatio = 1.0,
+                    EstimatedZ = GetEffectiveAtomicNumber(MaterialType.Air),
+                    DetectedMaterial = MaterialType.Air,
                     Health = 95 + (_random.NextDouble() * 5)
                 };
             }
@@ -266,12 +349,12 @@ namespace SEE_INSADE.Services.Scanning
         {
             _objects.Clear();
 
-            AddObject(90, 95, 135, 80, MaterialType.Organic, 0.75);
-            AddObject(245, 145, 70, 110, MaterialType.Plastic, 0.62);
+            AddObject(90, 95, 135, 80, MaterialType.Organic, 0.72);
+            AddObject(245, 145, 70, 110, MaterialType.Plastic, 0.60);
             AddObject(355, 185, 46, 46, MaterialType.HeavyMetal, 0.95);
-            AddObject(455, 115, 95, 76, MaterialType.Electronics, 0.86);
-            AddObject(625, 170, 110, 72, MaterialType.Glass, 0.55);
-            AddObject(780, 210, 58, 58, MaterialType.LightMetal, 0.72);
+            AddObject(455, 115, 95, 76, MaterialType.Electronics, 0.78);
+            AddObject(625, 170, 110, 72, MaterialType.Glass, 0.58);
+            AddObject(780, 210, 58, 58, MaterialType.LightMetal, 0.74);
 
             // A mixed bag-like region makes the line scanner output less synthetic.
             AddObject(520, 230, 70, 95, MaterialType.Mixed, 0.65);
@@ -334,6 +417,15 @@ namespace SEE_INSADE.Services.Scanning
 
         private readonly record struct SceneSample(MaterialType Material, double Density);
 
+        private readonly record struct DualEnergyMeasurement(
+            double LowEnergySignal,
+            double HighEnergySignal,
+            double DisplaySignal,
+            double AttenuationRatio,
+            double EstimatedZ,
+            double ArealDensity,
+            MaterialType DetectedMaterial);
+
         private sealed class ScanObject
         {
             public ScanObject(double x, double y, double width, double height, MaterialType material, double baseDensity)
@@ -386,6 +478,11 @@ namespace SEE_INSADE.Services.Scanning
         public bool IsActive { get; set; }
         public double Sensitivity { get; set; }
         public double CurrentReading { get; set; }
+        public double LowEnergyReading { get; set; }
+        public double HighEnergyReading { get; set; }
+        public double AttenuationRatio { get; set; }
+        public double EstimatedZ { get; set; }
+        public MaterialType DetectedMaterial { get; set; }
         public double Health { get; set; }
     }
 
