@@ -8,11 +8,22 @@ namespace SEE_INSADE.Data
     {
         public DbSet<Detector> Detectors { get; set; }
         public DbSet<ScanSession> ScanSessions { get; set; }
-        public DbSet<DetectorMetric> DetectorMetrics { get; set; }
+
+        public ApplicationDbContext()
+        {
+        }
+
+        public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options)
+            : base(options)
+        {
+        }
 
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
-            optionsBuilder.UseSqlite("Data Source=see_insade.db");
+            if (!optionsBuilder.IsConfigured)
+            {
+                optionsBuilder.UseSqlite("Data Source=see_insade.db");
+            }
         }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
