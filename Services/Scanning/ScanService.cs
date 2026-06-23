@@ -17,7 +17,7 @@ namespace SEE_INSADE.Services.Scanning
         private readonly List<ScanObject> _objects = new();
         private ScanData _currentScan = null!;
         private double _beltPosition;
-        private int _writeColumn;
+        private int _capturedColumns;
 
         public ScanService()
         {
@@ -49,7 +49,7 @@ namespace SEE_INSADE.Services.Scanning
             InitializeScanColumns(width);
 
             _beltPosition = 0;
-            _writeColumn = 0;
+            _capturedColumns = 0;
             _currentScan.ObjectCount = _objects.Count;
         }
 
@@ -59,16 +59,17 @@ namespace SEE_INSADE.Services.Scanning
             double beltStep = Math.Max(0.1, speed) * config.Speed;
 
             _currentScan.ScanPosition = _beltPosition;
-            AcquireDetectorColumn(_writeColumn, _beltPosition);
+            ShiftScanBufferLeft();
+            AcquireDetectorColumn(_currentScan.Image.PixelWidth - 1, _beltPosition);
 
             _beltPosition += beltStep;
-            _writeColumn = (_writeColumn + 1) % _currentScan.Image.PixelWidth;
+            _capturedColumns++;
 
             double sceneLength = config.Width + 300;
             if (_beltPosition >= sceneLength)
             {
                 _beltPosition = 0;
-                _writeColumn = 0;
+                _capturedColumns = 0;
                 ClearImageAndOutputMaps();
                 InitializeScanColumns(_currentScan.Image.PixelWidth);
             }
@@ -110,6 +111,59 @@ namespace SEE_INSADE.Services.Scanning
                 pixels,
                 4,
                 0);
+        }
+
+        private void ShiftScanBufferLeft()
+        {
+            int width = _currentScan.Image.PixelWidth;
+            int height = _currentScan.Image.PixelHeight;
+
+            if (width <= 1)
+                return;
+
+            byte[] pixels = new byte[width * height * 4];
+            _currentScan.Image.CopyPixels(pixels, width * 4, 0);
+
+            int rowStride = width * 4;
+            int shiftedBytes = (width - 1) * 4;
+            for (int y = 0; y < height; y++)
+            {
+                int rowStart = y * rowStride;
+                Buffer.BlockCopy(pixels, rowStart + 4, pixels, rowStart, shiftedBytes);
+
+                int lastPixel = rowStart + shiftedBytes;
+                pixels[lastPixel] = 0;
+                pixels[lastPixel + 1] = 0;
+                pixels[lastPixel + 2] = 0;
+                pixels[lastPixel + 3] = 255;
+            }
+
+            for (int x = 0; x < width - 1; x++)
+            {
+                for (int y = 0; y < height; y++)
+                {
+                    _currentScan.MaterialMap[x, y] = _currentScan.MaterialMap[x + 1, y];
+                    _currentScan.DensityMap[x, y] = _currentScan.DensityMap[x + 1, y];
+                }
+
+                _currentScan.ScanLines[x] = _currentScan.ScanLines[x + 1];
+                _currentScan.ScanLines[x].LineNumber = x;
+            }
+
+            for (int y = 0; y < height; y++)
+            {
+                _currentScan.MaterialMap[width - 1, y] = MaterialType.Air;
+                _currentScan.DensityMap[width - 1, y] = AirDensity;
+            }
+
+            _currentScan.ScanLines[width - 1] = new ScanLineData
+            {
+                LineNumber = width - 1,
+                IsScanned = false,
+                Timestamp = DateTime.MinValue
+            };
+
+            _currentScan.Image.WritePixels(new Int32Rect(0, 0, width, height), pixels, rowStride, 0);
         }
 
         private SceneSample SampleSceneAtDetector(double beltPosition, int detectorY)
@@ -259,7 +313,7 @@ namespace SEE_INSADE.Services.Scanning
             return Math.Clamp(_beltPosition / (config.Width + 300.0), 0, 1);
         }
 
-        public int GetCurrentScanLine() => _writeColumn;
+        public int GetCurrentScanLine() => Math.Min(_capturedColumns, _currentScan.Image.PixelWidth);
 
         private WriteableBitmap CreateBlankBitmap(int width, int height)
         {
