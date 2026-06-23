@@ -2,6 +2,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using SEE_INSADE.Data;
 using SEE_INSADE.Services;
+using SEE_INSADE.UI.MainWindows;
 using SEE_INSADE.ViewModels;
 using System.Windows;
 
@@ -40,7 +41,7 @@ namespace SEE_INSADE
 
             // Create and show main window
             var mainWindow = new MainWindow();
-            var viewModel = serviceProvider.GetService<MainViewModel>();
+            var viewModel = serviceProvider.GetRequiredService<MainViewModel>();
             mainWindow.DataContext = viewModel;
             mainWindow.Show();
         }

@@ -1,0 +1,141 @@
+﻿<Window x:Class="SEE_INSADE.UI.Dialogs.DetectorVisualizationWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="SEE INSADE - Detector Visualization &amp; Diagnostics" 
+        Height="700" Width="1000"
+        WindowStartupLocation="CenterOwner"
+        Background="{StaticResource BackgroundBrush}">
+
+    <Grid Margin="15">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <Border Grid.Row="0" Background="{StaticResource PanelBrush}" CornerRadius="4" Padding="15,10">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="📡" FontSize="20" Margin="0,0,10,0"/>
+                <TextBlock Text="DETECTOR VISUALIZATION &amp; DIAGNOSTICS" 
+                          FontSize="16" FontWeight="Bold" Foreground="White"/>
+            </StackPanel>
+        </Border>
+
+        <!-- Main Content -->
+        <Grid Grid.Row="1" Margin="0,10,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="300"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Controls Panel -->
+            <Border Grid.Column="0" Background="{StaticResource PanelBrush}" CornerRadius="4" Margin="0,0,10,0">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="15">
+
+                        <!-- Visualization Mode -->
+                        <GroupBox Header="Visualization Mode" Foreground="White" 
+                                 Background="#FF1A1A2E" Padding="10" Margin="0,0,0,10">
+                            <StackPanel>
+                                <RadioButton x:Name="ModeOverview" Content="Overview" Foreground="White" 
+                                           IsChecked="True" Checked="VisualizationMode_Changed"/>
+                                <RadioButton x:Name="ModeHealth" Content="Health Map" Foreground="White" 
+                                           Margin="0,5,0,0" Checked="VisualizationMode_Changed"/>
+                                <RadioButton x:Name="ModeActivity" Content="Activity" Foreground="White" 
+                                           Margin="0,5,0,0" Checked="VisualizationMode_Changed"/>
+                                <RadioButton x:Name="ModeSensitivity" Content="Sensitivity" Foreground="White" 
+                                           Margin="0,5,0,0" Checked="VisualizationMode_Changed"/>
+                            </StackPanel>
+                        </GroupBox>
+
+                        <!-- Display Options -->
+                        <GroupBox Header="Display Options" Foreground="White" 
+                                 Background="#FF1A1A2E" Padding="10" Margin="0,0,0,10">
+                            <StackPanel>
+                                <CheckBox x:Name="ShowGrid" Content="Show Grid" Foreground="White" IsChecked="True"
+                                         Checked="DisplayOption_Changed" Unchecked="DisplayOption_Changed"/>
+                                <CheckBox x:Name="ShowLabels" Content="Show Labels" Foreground="White" 
+                                         Margin="0,5,0,0" Checked="DisplayOption_Changed" Unchecked="DisplayOption_Changed"/>
+                                <CheckBox x:Name="ShowReadings" Content="Show Readings" Foreground="White" 
+                                         Margin="0,5,0,0" IsChecked="True"
+                                         Checked="DisplayOption_Changed" Unchecked="DisplayOption_Changed"/>
+                                <CheckBox x:Name="AnimateScan" Content="Animate Scan" Foreground="White" 
+                                         Margin="0,5,0,0" IsChecked="True"
+                                         Checked="DisplayOption_Changed" Unchecked="DisplayOption_Changed"/>
+                            </StackPanel>
+                        </GroupBox>
+
+                        <!-- Detector Controls -->
+                        <GroupBox Header="Detector Controls" Foreground="White" 
+                                 Background="#FF1A1A2E" Padding="10" Margin="0,0,0,10">
+                            <StackPanel>
+                                <Button Content="TEST ALL DETECTORS" Style="{StaticResource ModernButton}" 
+                                       Click="TestAllDetectors_Click"/>
+                                <Button Content="CALIBRATE SELECTED" Style="{StaticResource ModernButton}" 
+                                       Margin="0,5,0,0" Click="CalibrateSelected_Click"/>
+                                <Button Content="GENERATE REPORT" Style="{StaticResource ModernButton}" 
+                                       Margin="0,5,0,0" Click="GenerateReport_Click"/>
+                            </StackPanel>
+                        </GroupBox>
+
+                        <!-- Selected Detector Info -->
+                        <Border Background="#202563EB" CornerRadius="4" Padding="10">
+                            <StackPanel>
+                                <TextBlock Text="SELECTED DETECTOR" Foreground="#FF60A5FA" FontWeight="SemiBold"/>
+                                <TextBlock x:Name="SelectedDetectorId" Text="ID: None" Foreground="#FF94A3B8" FontSize="10"/>
+                                <TextBlock x:Name="SelectedDetectorHealth" Text="Health: --" Foreground="#FF94A3B8" FontSize="10"/>
+                                <TextBlock x:Name="SelectedDetectorSensitivity" Text="Sensitivity: --" Foreground="#FF94A3B8" FontSize="10"/>
+                                <TextBlock x:Name="SelectedDetectorReading" Text="Reading: --" Foreground="#FF94A3B8" FontSize="10"/>
+                            </StackPanel>
+                        </Border>
+
+                    </StackPanel>
+                </ScrollViewer>
+            </Border>
+
+            <!-- Visualization Area -->
+            <Border Grid.Column="1" Background="{StaticResource PanelBrush}" CornerRadius="4">
+                <Grid>
+                    <Viewbox Stretch="Uniform">
+                        <Image x:Name="DetectorVisualizationImage" Stretch="None" 
+                               MouseMove="DetectorImage_MouseMove"
+                               MouseLeftButtonDown="DetectorImage_MouseLeftButtonDown"/>
+                    </Viewbox>
+
+                    <!-- Overlay for interactive elements -->
+                    <Canvas x:Name="DetectorOverlayCanvas" Background="Transparent"/>
+
+                    <!-- Status Overlay -->
+                    <Border Background="#80000000" CornerRadius="4" 
+                           HorizontalAlignment="Right" VerticalAlignment="Top" 
+                           Margin="10" Padding="10" Width="250">
+                        <StackPanel>
+                            <TextBlock Text="DETECTOR ARRAY STATUS" Foreground="#FF60A5FA" 
+                                      FontWeight="Bold" Margin="0,0,0,8"/>
+                            <TextBlock x:Name="TotalDetectorsText" Text="Total: 400" Foreground="White" FontSize="11"/>
+                            <TextBlock x:Name="ActiveDetectorsText" Text="Active: 400" Foreground="#FF10B981" FontSize="11"/>
+                            <TextBlock x:Name="HealthStatusText" Text="Avg Health: 95%" Foreground="White" FontSize="11"/>
+                            <TextBlock x:Name="ScanStatusText" Text="Scan: Active" Foreground="White" FontSize="11"/>
+                        </StackPanel>
+                    </Border>
+                </Grid>
+            </Border>
+
+        </Grid>
+
+        <!-- Status Bar -->
+        <StatusBar Grid.Row="2" Background="{StaticResource PanelBrush}" Margin="0,10,0,0">
+            <StatusBarItem>
+                <TextBlock x:Name="StatusText" Text="Ready for detector diagnostics" Foreground="White"/>
+            </StatusBarItem>
+            <StatusBarItem HorizontalAlignment="Right">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="Visualization:" Foreground="#FF94A3B8" Margin="0,0,10,0"/>
+                    <TextBlock x:Name="VisualizationModeText" Text="Overview" Foreground="White" FontWeight="SemiBold"/>
+                </StackPanel>
+            </StatusBarItem>
+        </StatusBar>
+
+    </Grid>
+</Window>
