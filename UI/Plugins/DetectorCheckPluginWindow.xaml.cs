@@ -21,6 +21,7 @@ namespace SEE_INSADE.UI.Plugins
         public DetectorCheckPluginWindow(ScanService scanService)
         {
             InitializeComponent();
+            SEE_INSADE.Core.Localization.LocalizationHelper.Apply(this);
 
             _scanService = scanService;
             _bitmap = new WriteableBitmap(BitmapWidth, BitmapHeight, 96, 96, PixelFormats.Bgr32, null);

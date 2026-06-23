@@ -1,4 +1,5 @@
-﻿using System.Windows;
+using System.Windows;
+using SEE_INSADE.Core.Localization;
 
 namespace SEE_INSADE.UI.Dialogs
 {
@@ -7,25 +8,32 @@ namespace SEE_INSADE.UI.Dialogs
         public SettingsWindow()
         {
             InitializeComponent();
+            LocalizationHelper.Apply(this);
         }
 
         private void Save_Click(object sender, RoutedEventArgs e)
         {
-            MessageBox.Show("Settings saved successfully!", "Success",
-                MessageBoxButton.OK, MessageBoxImage.Information);
-            this.DialogResult = true;
+            MessageBox.Show(
+                LocalizationManager.Instance.T("message.settingsSaved"),
+                LocalizationManager.Instance.T("message.success"),
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+            DialogResult = true;
         }
 
         private void Cancel_Click(object sender, RoutedEventArgs e)
         {
-            this.DialogResult = false;
-            this.Close();
+            DialogResult = false;
+            Close();
         }
 
         private void Apply_Click(object sender, RoutedEventArgs e)
         {
-            MessageBox.Show("Settings applied successfully!", "Success",
-                MessageBoxButton.OK, MessageBoxImage.Information);
+            MessageBox.Show(
+                LocalizationManager.Instance.T("message.settingsApplied"),
+                LocalizationManager.Instance.T("message.success"),
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
         }
     }
 }

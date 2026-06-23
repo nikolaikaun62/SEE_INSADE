@@ -114,12 +114,11 @@ namespace SEE_INSADE.Core.Imaging
             double[,] densityMap,
             int width,
             int height,
-            OperatorFilterMode mode,
-            double intensity)
+            OperatorFilterSettings settings)
         {
             var bitmap = new WriteableBitmap(width, height, 96, 96, PixelFormats.Bgr32, null);
             byte[] pixels = new byte[width * height * 4];
-            intensity = Math.Clamp(intensity, 0.1, 3.0);
+            double intensity = Math.Clamp(settings.Strength, 0.1, 3.0);
 
             for (int y = 0; y < height; y++)
             {
@@ -128,7 +127,8 @@ namespace SEE_INSADE.Core.Imaging
                     int index = (y * width + x) * 4;
                     MaterialType material = GetMapValue(materialMap, x, y, MaterialType.Air);
                     double density = Math.Clamp(GetMapValue(densityMap, x, y, 0), 0.0, 1.5);
-                    Color color = GetOperatorFilterColor(materialMap, densityMap, x, y, material, density, mode, intensity);
+                    Color color = GetOperatorFilterColor(materialMap, densityMap, x, y, material, density, settings.Mode, intensity);
+                    color = ApplyOperatorToggles(materialMap, densityMap, x, y, material, density, color, settings);
 
                     pixels[index] = color.B;
                     pixels[index + 1] = color.G;
@@ -139,6 +139,34 @@ namespace SEE_INSADE.Core.Imaging
 
             bitmap.WritePixels(new System.Windows.Int32Rect(0, 0, width, height), pixels, width * 4, 0);
             return bitmap;
+        }
+
+        private Color ApplyOperatorToggles(
+            MaterialType[,] materialMap,
+            double[,] densityMap,
+            int x,
+            int y,
+            MaterialType material,
+            double density,
+            Color color,
+            OperatorFilterSettings settings)
+        {
+            if (settings.NoiseReductionEnabled)
+                color = Blend(color, GetNeighborhoodAverage(materialMap, densityMap, x, y), 0.35);
+
+            if (settings.MaterialEnhancementEnabled)
+                color = BoostSaturation(color, 0.35 + density * 0.35);
+
+            if (settings.EdgeDetectionEnabled)
+                color = EdgeColor(materialMap, densityMap, x, y, color, 1.6);
+
+            if (settings.BrightnessEnabled)
+                color = AdjustBrightness(color, settings.Brightness);
+
+            if (settings.ContrastEnabled)
+                color = AdjustContrast(color, settings.Contrast);
+
+            return color;
         }
 
         private Color GetMaterialColor(MaterialType material)
@@ -285,6 +313,48 @@ namespace SEE_INSADE.Core.Imaging
                 (byte)Math.Clamp(gray + (input.R - gray) * (1.0 + amount), 0, 255),
                 (byte)Math.Clamp(gray + (input.G - gray) * (1.0 + amount), 0, 255),
                 (byte)Math.Clamp(gray + (input.B - gray) * (1.0 + amount), 0, 255));
+        }
+
+        private Color GetNeighborhoodAverage(MaterialType[,] materialMap, double[,] densityMap, int x, int y)
+        {
+            double r = 0;
+            double g = 0;
+            double b = 0;
+            int count = 0;
+
+            for (int yy = y - 1; yy <= y + 1; yy++)
+            {
+                for (int xx = x - 1; xx <= x + 1; xx++)
+                {
+                    MaterialType material = GetMapValue(materialMap, xx, yy, MaterialType.Air);
+                    double density = GetMapValue(densityMap, xx, yy, 0);
+                    Color color = GetXrayMaterialColor(material, density);
+                    r += color.R;
+                    g += color.G;
+                    b += color.B;
+                    count++;
+                }
+            }
+
+            return Color.FromRgb((byte)(r / count), (byte)(g / count), (byte)(b / count));
+        }
+
+        private static Color AdjustBrightness(Color input, double brightness)
+        {
+            double factor = Math.Clamp(brightness, 0.1, 3.0);
+            return Color.FromRgb(
+                (byte)Math.Clamp(input.R * factor, 0, 255),
+                (byte)Math.Clamp(input.G * factor, 0, 255),
+                (byte)Math.Clamp(input.B * factor, 0, 255));
+        }
+
+        private static Color AdjustContrast(Color input, double contrast)
+        {
+            double factor = Math.Clamp(contrast, 0.1, 3.0);
+            return Color.FromRgb(
+                (byte)Math.Clamp(((input.R / 255.0 - 0.5) * factor + 0.5) * 255, 0, 255),
+                (byte)Math.Clamp(((input.G / 255.0 - 0.5) * factor + 0.5) * 255, 0, 255),
+                (byte)Math.Clamp(((input.B / 255.0 - 0.5) * factor + 0.5) * 255, 0, 255));
         }
 
         private static byte ToGray(Color input)

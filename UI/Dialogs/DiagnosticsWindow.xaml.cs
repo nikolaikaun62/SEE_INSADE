@@ -8,6 +8,7 @@ namespace SEE_INSADE.UI.Dialogs
         public DiagnosticsWindow()
         {
             InitializeComponent();
+            SEE_INSADE.Core.Localization.LocalizationHelper.Apply(this);
         }
 
         private async void RunDetectorTest_Click(object sender, RoutedEventArgs e)

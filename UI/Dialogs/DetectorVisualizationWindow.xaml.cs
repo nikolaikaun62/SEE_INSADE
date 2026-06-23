@@ -29,6 +29,7 @@ namespace SEE_INSADE.UI.Dialogs
         public DetectorVisualizationWindow(ScanService scanService)
         {
             InitializeComponent();
+            SEE_INSADE.Core.Localization.LocalizationHelper.Apply(this);
             _scanService = scanService;
 
             // Отложим инициализацию до полной загрузки окна

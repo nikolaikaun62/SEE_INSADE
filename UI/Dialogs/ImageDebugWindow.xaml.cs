@@ -17,6 +17,7 @@ namespace SEE_INSADE.UI.Dialogs
         public ImageDebugWindow(WriteableBitmap image)
         {
             InitializeComponent();
+            SEE_INSADE.Core.Localization.LocalizationHelper.Apply(this);
             _currentImage = image;
             DebugImage.Source = _currentImage;
             InitializeDebugTools();

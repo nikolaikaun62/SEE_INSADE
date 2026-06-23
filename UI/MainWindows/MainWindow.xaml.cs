@@ -57,7 +57,7 @@ namespace SEE_INSADE.UI.MainWindows
             _pluginManager = new PluginManager(new PluginContext(_scanService, this));
             _pluginManager.Register(new DetectorCheckPlugin());
             _pluginManager.LoadExternalPlugins();
-            _localization = new LocalizationManager();
+            _localization = LocalizationManager.Instance;
             _localization.LoadLanguages();
 
             // Create and store filter instances
@@ -254,8 +254,18 @@ namespace SEE_INSADE.UI.MainWindows
                 scanData.DensityMap,
                 scanData.Image.PixelWidth,
                 scanData.Image.PixelHeight,
-                mode,
-                OperatorFilterSlider?.Value ?? 1.0);
+                new OperatorFilterSettings
+                {
+                    Mode = mode,
+                    Strength = OperatorFilterSlider?.Value ?? 1.0,
+                    BrightnessEnabled = BrightnessFilterCheck?.IsChecked == true,
+                    Brightness = BrightnessSlider?.Value ?? 1.0,
+                    ContrastEnabled = ContrastFilterCheck?.IsChecked == true,
+                    Contrast = ContrastSlider?.Value ?? 1.0,
+                    MaterialEnhancementEnabled = MaterialFilterCheck?.IsChecked == true,
+                    EdgeDetectionEnabled = EdgeFilterCheck?.IsChecked == true,
+                    NoiseReductionEnabled = NoiseFilterCheck?.IsChecked == true
+                });
 
             FilteredImage.Source = _filteredBitmap;
         }
@@ -413,11 +423,8 @@ namespace SEE_INSADE.UI.MainWindows
                 }
 
                 // Force refresh if scanning
-                if (_isScanning && !_isPaused)
-                {
-                    var scanData = _scanService.GetCurrentScan();
-                    UpdateFilteredView(scanData);
-                }
+                var scanData = _scanService.GetCurrentScan();
+                UpdateFilteredView(scanData);
             }
             catch (Exception ex)
             {

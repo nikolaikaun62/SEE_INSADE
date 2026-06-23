@@ -11,6 +11,7 @@ namespace SEE_INSADE.UI.Dialogs
         public CalibrationWizard()
         {
             InitializeComponent();
+            SEE_INSADE.Core.Localization.LocalizationHelper.Apply(this);
             InitializeWizard();
         }
 

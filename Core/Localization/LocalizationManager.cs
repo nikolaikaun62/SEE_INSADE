@@ -8,6 +8,8 @@ namespace SEE_INSADE.Core.Localization
 {
     public sealed class LocalizationManager
     {
+        public static LocalizationManager Instance { get; } = new();
+
         private readonly Dictionary<string, Dictionary<string, string>> _languages = new();
 
         public ObservableCollection<LanguageOption> AvailableLanguages { get; } = new();
@@ -56,6 +58,22 @@ namespace SEE_INSADE.Core.Localization
                 return fallback;
 
             return key;
+        }
+
+        public string TText(string englishText)
+        {
+            if (!_languages.TryGetValue("en", out Dictionary<string, string>? english))
+                return englishText;
+
+            foreach (var pair in english)
+            {
+                if (!pair.Value.Equals(englishText, StringComparison.Ordinal))
+                    continue;
+
+                return T(pair.Key);
+            }
+
+            return englishText;
         }
 
         private void TryLoadLanguage(string file)
