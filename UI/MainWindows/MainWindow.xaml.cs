@@ -24,7 +24,6 @@ namespace SEE_INSADE.UI.MainWindows
         private bool _isPaused = false;
         private int _frameCount = 0;
         private DateTime _lastUpdate = DateTime.Now;
-        private double _conveyorPosition = 0;
 
         private ImageProcessor _imageProcessor = null!;
         private ScanService _scanService = null!;
@@ -113,10 +112,9 @@ namespace SEE_INSADE.UI.MainWindows
             if (!_isScanning || _isPaused) return;
 
             _frameCount++;
-            _conveyorPosition += SpeedSlider.Value;
 
-            // Update scan service
-            _scanService.UpdateScan();
+            // Read one vertical detector line and append it to the scan image.
+            _scanService.UpdateScan(SpeedSlider.Value);
             var scanData = _scanService.GetCurrentScan();
 
             // Process images
@@ -128,11 +126,6 @@ namespace SEE_INSADE.UI.MainWindows
                 UpdateRealTimeInfo(scanData);
             }
 
-            // Reset when scan completes
-            if (_conveyorPosition > 800 + 300)
-            {
-                _conveyorPosition = -200;
-            }
         }
 
         private void UpdateAllDisplays(ScanData scanData)
@@ -257,7 +250,7 @@ namespace SEE_INSADE.UI.MainWindows
 
         private void UpdateRealTimeInfo(ScanData scanData)
         {
-            PositionText.Text = $"Position: {(int)_conveyorPosition}px";
+            PositionText.Text = $"Belt: {(int)scanData.ScanPosition}px  Column: {_scanService.GetCurrentScanLine()}";
             ObjectsText.Text = $"Objects: {scanData.ObjectCount}";
             SpeedText.Text = $"Speed: {SpeedSlider.Value:F1}x";
             DetectorsText.Text = "Detectors: 400/400";
@@ -335,7 +328,6 @@ namespace SEE_INSADE.UI.MainWindows
             _isScanning = false;
             _isPaused = false;
             _scanTimer.Stop();
-            _conveyorPosition = -200;
             _frameCount = 0;
             _scanService.ResetScan();
             UpdateStatus("SCAN RESET");

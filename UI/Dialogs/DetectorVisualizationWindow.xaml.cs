@@ -206,10 +206,15 @@ namespace SEE_INSADE.UI.Dialogs
 
         private void DrawDetectorArrayBase(byte[] pixels, int width, int height)
         {
-            for (int y = 350; y < height; y++)
+            int centerX = width / 2;
+
+            for (int y = 0; y < height; y++)
             {
-                for (int x = 0; x < width; x++)
+                for (int dx = -8; dx <= 8; dx++)
                 {
+                    int x = centerX + dx;
+                    if (x < 0 || x >= width) continue;
+
                     int index = (y * width + x) * 4;
                     pixels[index] = 40;
                     pixels[index + 1] = 40;
@@ -220,15 +225,15 @@ namespace SEE_INSADE.UI.Dialogs
 
         private void DrawDetector(byte[] pixels, int width, int height, DetectorInfo detector, Color color)
         {
-            int x = (int)detector.Position;
-            int baseY = 350;
+            int x = width / 2;
+            int y = (int)Math.Clamp(detector.Position, 0, height - 1);
 
-            for (int dy = 0; dy < 15; dy++)
+            for (int dy = -1; dy <= 1; dy++)
             {
-                for (int dx = -2; dx <= 2; dx++)
+                for (int dx = -5; dx <= 5; dx++)
                 {
                     int px = x + dx;
-                    int py = baseY - dy;
+                    int py = y + dy;
 
                     if (px >= 0 && px < width && py >= 0 && py < height)
                     {
@@ -242,10 +247,10 @@ namespace SEE_INSADE.UI.Dialogs
 
             if (detector.IsActive)
             {
-                for (int dx = -1; dx <= 1; dx++)
+                for (int dx = -8; dx <= -6; dx++)
                 {
                     int px = x + dx;
-                    int py = baseY - 16;
+                    int py = y;
 
                     if (px >= 0 && px < width && py >= 0 && py < height)
                     {
@@ -260,16 +265,16 @@ namespace SEE_INSADE.UI.Dialogs
 
         private void DrawReadingBar(byte[] pixels, int width, int height, DetectorInfo detector, double reading)
         {
-            int x = (int)detector.Position;
-            int barHeight = (int)(reading * 100);
-            int baseY = 350;
+            int x = width / 2 + 12;
+            int y = (int)Math.Clamp(detector.Position, 0, height - 1);
+            int barWidth = (int)(reading * 120);
 
-            for (int dy = 1; dy <= barHeight; dy++)
+            for (int dx = 0; dx <= barWidth; dx++)
             {
-                for (int dx = -1; dx <= 1; dx++)
+                for (int dy = -1; dy <= 1; dy++)
                 {
                     int px = x + dx;
-                    int py = baseY - 15 - dy;
+                    int py = y + dy;
 
                     if (px >= 0 && px < width && py >= 0 && py < height)
                     {
@@ -309,7 +314,7 @@ namespace SEE_INSADE.UI.Dialogs
 
         private void DrawScanBeam(byte[] pixels, int width, int height, ScanData scanData)
         {
-            int x = (int)scanData.ScanPosition;
+            int x = width / 2;
 
             for (int y = 0; y < height; y++)
             {
@@ -361,8 +366,8 @@ namespace SEE_INSADE.UI.Dialogs
                     Tag = detector
                 };
 
-                Canvas.SetLeft(ellipse, detector.Position - 4);
-                Canvas.SetTop(ellipse, 350 - 20);
+                Canvas.SetLeft(ellipse, DetectorOverlayCanvas.ActualWidth / 2 - 4);
+                Canvas.SetTop(ellipse, detector.Position - 4);
 
                 ellipse.MouseEnter += DetectorMarker_MouseEnter;
                 ellipse.MouseLeave += DetectorMarker_MouseLeave;

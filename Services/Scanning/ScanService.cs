@@ -1,4 +1,6 @@
-﻿using System;
+using System;
+using System.Collections.Generic;
+using System.Windows;
 using System.Windows.Media.Imaging;
 using SEE_INSADE.Core.Config;
 
@@ -6,10 +8,16 @@ namespace SEE_INSADE.Services.Scanning
 {
     public class ScanService
     {
+        private const double BeamX = 0.0;
+        private const double AirDensity = 0.01;
+        private const double RayPathScale = 0.18;
+        private const double NoiseAmplitude = 0.012;
+
+        private readonly Random _random;
+        private readonly List<ScanObject> _objects = new();
         private ScanData _currentScan = null!;
-        private Random _random;
-        private double _scanProgress = 0;
-        private int _currentScanLine = 0;
+        private double _beltPosition;
+        private int _writeColumn;
 
         public ScanService()
         {
@@ -20,147 +28,161 @@ namespace SEE_INSADE.Services.Scanning
         public void ResetScan()
         {
             var config = ConfigManager.Current.ScanSettings;
+            int width = config.Width;
+            int height = config.Height;
+            int detectorCount = height;
+
             _currentScan = new ScanData
             {
-                Image = CreateBlankBitmap(config.Width, config.Height),
-                MaterialMap = new MaterialType[config.Width, config.Height],
-                DensityMap = new double[config.Width, config.Height],
+                Image = CreateBlankBitmap(width, height),
+                MaterialMap = new MaterialType[width, height],
+                DensityMap = new double[width, height],
                 ScanPosition = 0,
                 ObjectCount = 0,
-                DetectorData = new DetectorInfo[config.DetectorCount],
-                ScanLines = new ScanLineData[config.Height]
+                DetectorData = new DetectorInfo[detectorCount],
+                ScanLines = new ScanLineData[width]
             };
 
-            InitializeDetectors();
-            InitializeTestObjects();
-            InitializeScanLines();
-            _scanProgress = 0;
-            _currentScanLine = 0;
+            InitializeOutputMaps();
+            InitializeDetectors(detectorCount, height);
+            InitializeSceneObjects(width, height);
+            InitializeScanColumns(width);
+
+            _beltPosition = 0;
+            _writeColumn = 0;
+            _currentScan.ObjectCount = _objects.Count;
         }
 
         public void UpdateScan(double speed = 1.0)
         {
             var config = ConfigManager.Current.ScanSettings;
+            double beltStep = Math.Max(0.1, speed) * config.Speed;
 
-            // Двигаем конвейер
-            _currentScan.ScanPosition += speed;
-            _scanProgress = _currentScan.ScanPosition / config.Width;
+            _currentScan.ScanPosition = _beltPosition;
+            AcquireDetectorColumn(_writeColumn, _beltPosition);
 
-            // Сканируем текущую строку детекторами
-            ScanCurrentLine();
+            _beltPosition += beltStep;
+            _writeColumn = (_writeColumn + 1) % _currentScan.Image.PixelWidth;
 
-            // Переходим к следующей строке
-            _currentScanLine = (int)(_currentScan.ScanPosition / 2) % config.Height;
-
-            if (_currentScan.ScanPosition > config.Width + 200)
+            double sceneLength = config.Width + 300;
+            if (_beltPosition >= sceneLength)
             {
-                ResetScan();
+                _beltPosition = 0;
+                _writeColumn = 0;
+                ClearImageAndOutputMaps();
+                InitializeScanColumns(_currentScan.Image.PixelWidth);
             }
         }
 
-        private void ScanCurrentLine()
+        private void AcquireDetectorColumn(int outputX, double beltPosition)
         {
-            if (_currentScanLine >= _currentScan.ScanLines.Length) return;
+            if (outputX < 0 || outputX >= _currentScan.Image.PixelWidth)
+                return;
 
-            var scanLine = _currentScan.ScanLines[_currentScanLine];
-            scanLine.IsScanned = true;
-            scanLine.Timestamp = DateTime.Now;
+            var scanColumn = _currentScan.ScanLines[outputX];
+            scanColumn.IsScanned = true;
+            scanColumn.Timestamp = DateTime.Now;
 
-            // Эмулируем работу каждого детектора в этой строке
+            byte[] pixels = new byte[_currentScan.Image.PixelHeight * 4];
+
             for (int detectorIndex = 0; detectorIndex < _currentScan.DetectorData.Length; detectorIndex++)
             {
                 var detector = _currentScan.DetectorData[detectorIndex];
-                if (detector.IsActive)
-                {
-                    // Получаем показания детектора для текущей позиции
-                    double reading = GetDetectorReading(detectorIndex, _currentScanLine);
-                    detector.CurrentReading = reading;
+                int y = detectorIndex;
 
-                    // Обновляем изображение на основе показаний
-                    UpdatePixelFromDetectorReading(detectorIndex, _currentScanLine, reading);
-                }
+                var sample = SampleSceneAtDetector(beltPosition, y);
+                double reading = GetDetectorReading(sample.Material, sample.Density, detector);
+                detector.CurrentReading = reading;
+
+                _currentScan.MaterialMap[outputX, y] = sample.Material;
+                _currentScan.DensityMap[outputX, y] = sample.Density;
+
+                byte intensity = ToXrayIntensity(reading);
+                int index = y * 4;
+                pixels[index] = intensity;
+                pixels[index + 1] = intensity;
+                pixels[index + 2] = intensity;
+                pixels[index + 3] = 255;
             }
+
+            _currentScan.Image.WritePixels(
+                new Int32Rect(outputX, 0, 1, _currentScan.Image.PixelHeight),
+                pixels,
+                4,
+                0);
         }
 
-        private double GetDetectorReading(int detectorX, int scanLineY)
+        private SceneSample SampleSceneAtDetector(double beltPosition, int detectorY)
         {
-            // Эмулируем физику рентгеновского луча
-            double baseIntensity = 1.0; // Исходная интенсивность рентгена
-            double transmittedIntensity = baseIntensity;
-
-            // Проходим луч через все объекты по пути к детектору
-            for (int objectY = 0; objectY <= scanLineY; objectY++)
+            double worldX = BeamX + beltPosition;
+            foreach (var scanObject in _objects)
             {
-                var material = _currentScan.MaterialMap[detectorX, objectY];
-                var density = _currentScan.DensityMap[detectorX, objectY];
+                if (scanObject.Contains(worldX, detectorY))
+                {
+                    double localX = (worldX - scanObject.X) / Math.Max(1, scanObject.Width);
+                    double localY = (detectorY - scanObject.Y) / Math.Max(1, scanObject.Height);
+                    double shape = 0.78 + 0.22 * Math.Sin(localX * Math.PI) * Math.Sin(localY * Math.PI);
+                    double density = scanObject.BaseDensity * shape;
 
-                // Коэффициент ослабления в зависимости от материала
-                double attenuation = GetMaterialAttenuation(material, density);
-                transmittedIntensity *= Math.Exp(-attenuation * 0.1); // Закон Бугера-Ламберта-Бера
+                    return new SceneSample(scanObject.Material, density);
+                }
             }
 
-            // Детектор регистрирует оставшуюся интенсивность
-            double reading = transmittedIntensity / baseIntensity;
+            return new SceneSample(MaterialType.Air, AirDensity);
+        }
 
-            // Добавляем небольшой шум
-            reading += (_random.NextDouble() - 0.5) * 0.02;
+        private double GetDetectorReading(MaterialType material, double density, DetectorInfo detector)
+        {
+            double attenuation = GetMaterialAttenuation(material, density);
+            double transmittedIntensity = Math.Exp(-attenuation * RayPathScale);
+            double calibratedReading = transmittedIntensity * detector.Sensitivity;
+            calibratedReading += (_random.NextDouble() - 0.5) * NoiseAmplitude;
 
-            return Math.Max(0, Math.Min(1, reading));
+            return Math.Clamp(calibratedReading, 0, 1);
         }
 
         private double GetMaterialAttenuation(MaterialType material, double density)
         {
-            // Коэффициенты ослабления для разных материалов
             return material switch
             {
                 MaterialType.Air => 0.01 * density,
-                MaterialType.Organic => 0.5 * density,
-                MaterialType.Inorganic => 1.0 * density,
-                MaterialType.Plastic => 0.8 * density,
-                MaterialType.Glass => 1.2 * density,
-                MaterialType.Liquid => 0.3 * density,
-                MaterialType.LightMetal => 2.0 * density,
-                MaterialType.HeavyMetal => 5.0 * density,
-                MaterialType.Electronics => 3.0 * density,
-                _ => 0.1 * density
+                MaterialType.Organic => 0.50 * density,
+                MaterialType.Inorganic => 1.00 * density,
+                MaterialType.Plastic => 0.70 * density,
+                MaterialType.Glass => 1.10 * density,
+                MaterialType.Liquid => 0.35 * density,
+                MaterialType.LightMetal => 1.80 * density,
+                MaterialType.HeavyMetal => 5.50 * density,
+                MaterialType.Electronics => 3.20 * density,
+                MaterialType.Mixed => 2.20 * density,
+                _ => 0.10 * density
             };
         }
 
-        private void UpdatePixelFromDetectorReading(int x, int y, double reading)
+        private static byte ToXrayIntensity(double detectorReading)
         {
-            // Преобразуем показания детектора в цвет пикселя
-            byte intensity = (byte)((1.0 - reading) * 255);
-
-            var pixels = new byte[4];
-            pixels[0] = intensity; // B
-            pixels[1] = intensity; // G  
-            pixels[2] = intensity; // R
-            pixels[3] = 255;       // A
-
-            _currentScan.Image.WritePixels(new System.Windows.Int32Rect(x, y, 1, 1), pixels, 4, 0);
+            return (byte)Math.Clamp((1.0 - detectorReading) * 255.0, 0, 255);
         }
 
-        private void InitializeDetectors()
+        private void InitializeDetectors(int detectorCount, int imageHeight)
         {
-            var config = ConfigManager.Current.ScanSettings;
-            for (int i = 0; i < config.DetectorCount; i++)
+            for (int i = 0; i < detectorCount; i++)
             {
                 _currentScan.DetectorData[i] = new DetectorInfo
                 {
                     Id = i,
-                    Position = i * (config.Width / (double)config.DetectorCount),
+                    Position = i,
                     IsActive = true,
-                    Sensitivity = 0.9 + (_random.NextDouble() * 0.2),
-                    CurrentReading = 0.0,
-                    Health = 95 + (_random.NextDouble() * 10)
+                    Sensitivity = 0.96 + (_random.NextDouble() * 0.08),
+                    CurrentReading = 1.0,
+                    Health = 95 + (_random.NextDouble() * 5)
                 };
             }
         }
 
-        private void InitializeScanLines()
+        private void InitializeScanColumns(int width)
         {
-            var config = ConfigManager.Current.ScanSettings;
-            for (int i = 0; i < config.Height; i++)
+            for (int i = 0; i < width; i++)
             {
                 _currentScan.ScanLines[i] = new ScanLineData
                 {
@@ -171,43 +193,59 @@ namespace SEE_INSADE.Services.Scanning
             }
         }
 
-        private void InitializeTestObjects()
+        private void InitializeOutputMaps()
         {
             int width = _currentScan.MaterialMap.GetLength(0);
             int height = _currentScan.MaterialMap.GetLength(1);
 
-            // Очищаем массивы (воздух)
-            for (int y = 0; y < height; y++)
+            for (int x = 0; x < width; x++)
             {
-                for (int x = 0; x < width; x++)
+                for (int y = 0; y < height; y++)
                 {
                     _currentScan.MaterialMap[x, y] = MaterialType.Air;
-                    _currentScan.DensityMap[x, y] = 0.01;
+                    _currentScan.DensityMap[x, y] = AirDensity;
                 }
             }
-
-            // Создаем реалистичные объекты
-            AddObject(100, 150, 120, 80, MaterialType.Organic, 0.7);
-            AddObject(250, 120, 60, 100, MaterialType.Plastic, 0.6);
-            AddObject(350, 180, 40, 40, MaterialType.HeavyMetal, 0.9);
-            AddObject(450, 140, 80, 60, MaterialType.Electronics, 0.8);
-            AddObject(600, 160, 100, 70, MaterialType.Glass, 0.5);
-            AddObject(750, 200, 50, 50, MaterialType.LightMetal, 0.7);
-
-            _currentScan.ObjectCount = 6;
         }
 
-        private void AddObject(int x, int y, int width, int height, MaterialType material, double baseDensity)
+        private void InitializeSceneObjects(int scanWidth, int scanHeight)
         {
-            for (int objY = y; objY < y + height && objY < _currentScan.MaterialMap.GetLength(1); objY++)
+            _objects.Clear();
+
+            AddObject(90, 95, 135, 80, MaterialType.Organic, 0.75);
+            AddObject(245, 145, 70, 110, MaterialType.Plastic, 0.62);
+            AddObject(355, 185, 46, 46, MaterialType.HeavyMetal, 0.95);
+            AddObject(455, 115, 95, 76, MaterialType.Electronics, 0.86);
+            AddObject(625, 170, 110, 72, MaterialType.Glass, 0.55);
+            AddObject(780, 210, 58, 58, MaterialType.LightMetal, 0.72);
+
+            // A mixed bag-like region makes the line scanner output less synthetic.
+            AddObject(520, 230, 70, 95, MaterialType.Mixed, 0.65);
+        }
+
+        private void AddObject(double x, double y, double width, double height, MaterialType material, double baseDensity)
+        {
+            _objects.Add(new ScanObject(x, y, width, height, material, baseDensity));
+        }
+
+        private void ClearImageAndOutputMaps()
+        {
+            InitializeOutputMaps();
+
+            byte[] pixels = new byte[_currentScan.Image.PixelWidth * _currentScan.Image.PixelHeight * 4];
+            for (int i = 0; i < pixels.Length; i += 4)
             {
-                for (int objX = x; objX < x + width && objX < _currentScan.MaterialMap.GetLength(0); objX++)
-                {
-                    _currentScan.MaterialMap[objX, objY] = material;
-                    double variation = 1.0 + (_random.NextDouble() * 0.4 - 0.2);
-                    _currentScan.DensityMap[objX, objY] = baseDensity * variation;
-                }
+                pixels[i] = 0;
+                pixels[i + 1] = 0;
+                pixels[i + 2] = 0;
+                pixels[i + 3] = 255;
             }
+
+            _currentScan.Image.WritePixels(
+                new Int32Rect(0, 0, _currentScan.Image.PixelWidth, _currentScan.Image.PixelHeight),
+                pixels,
+                _currentScan.Image.PixelWidth * 4,
+                0);
         }
 
         public ScanData GetCurrentScan()
@@ -215,9 +253,13 @@ namespace SEE_INSADE.Services.Scanning
             return _currentScan;
         }
 
-        public double GetScanProgress() => _scanProgress;
+        public double GetScanProgress()
+        {
+            var config = ConfigManager.Current.ScanSettings;
+            return Math.Clamp(_beltPosition / (config.Width + 300.0), 0, 1);
+        }
 
-        public int GetCurrentScanLine() => _currentScanLine;
+        public int GetCurrentScanLine() => _writeColumn;
 
         private WriteableBitmap CreateBlankBitmap(int width, int height)
         {
@@ -231,9 +273,44 @@ namespace SEE_INSADE.Services.Scanning
                 blackPixels[i + 2] = 0;
                 blackPixels[i + 3] = 255;
             }
-            bitmap.WritePixels(new System.Windows.Int32Rect(0, 0, width, height), blackPixels, width * 4, 0);
+            bitmap.WritePixels(new Int32Rect(0, 0, width, height), blackPixels, width * 4, 0);
 
             return bitmap;
+        }
+
+        private readonly record struct SceneSample(MaterialType Material, double Density);
+
+        private sealed class ScanObject
+        {
+            public ScanObject(double x, double y, double width, double height, MaterialType material, double baseDensity)
+            {
+                X = x;
+                Y = y;
+                Width = width;
+                Height = height;
+                Material = material;
+                BaseDensity = baseDensity;
+            }
+
+            public double X { get; }
+            public double Y { get; }
+            public double Width { get; }
+            public double Height { get; }
+            public MaterialType Material { get; }
+            public double BaseDensity { get; }
+
+            public bool Contains(double x, double y)
+            {
+                if (x < X || x >= X + Width || y < Y || y >= Y + Height)
+                    return false;
+
+                double centerX = X + Width / 2.0;
+                double centerY = Y + Height / 2.0;
+                double normalizedX = (x - centerX) / (Width / 2.0);
+                double normalizedY = (y - centerY) / (Height / 2.0);
+
+                return normalizedX * normalizedX + normalizedY * normalizedY <= 1.0;
+            }
         }
     }
 
