@@ -341,7 +341,7 @@ namespace SEE_INSADE.UI.MainWindows
             UpdateStatus("SCAN RESET");
         }
 
-        // Filter Event Handlers - FIXED VERSION
+        // Filter Event Handlers
         private void Filter_Changed(object sender, RoutedEventArgs e)
         {
             // Safely update filter intensities based on UI

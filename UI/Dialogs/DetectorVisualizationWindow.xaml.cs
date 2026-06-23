@@ -71,7 +71,7 @@ namespace SEE_INSADE.UI.Dialogs
             }
         }
 
-        private void AnimationTimer_Tick(object sender, EventArgs e)
+        private void AnimationTimer_Tick(object? sender, EventArgs e)
         {
             if (_animateScan && _isInitialized)
             {

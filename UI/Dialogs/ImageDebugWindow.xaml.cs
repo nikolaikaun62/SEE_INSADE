@@ -1,11 +1,9 @@
 ﻿using System;
 using System.Windows;
-using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
-using SEE_INSADE.Core.Imaging;
 
 namespace SEE_INSADE.UI.Dialogs
 {
@@ -14,7 +12,7 @@ namespace SEE_INSADE.UI.Dialogs
         private WriteableBitmap _currentImage;
         private Point _startPoint;
         private bool _isMeasuring = false;
-        private Line _measurementLine;
+        private Line? _measurementLine;
 
         public ImageDebugWindow(WriteableBitmap image)
         {
@@ -120,7 +118,8 @@ namespace SEE_INSADE.UI.Dialogs
         private void CompleteMeasurement(Point endPoint)
         {
             _isMeasuring = false;
-            DebugOverlayCanvas.Children.Remove(_measurementLine);
+            if (_measurementLine != null)
+                DebugOverlayCanvas.Children.Remove(_measurementLine);
             _measurementLine = null;
 
             DebugStatusText.Text = "Measurement completed";

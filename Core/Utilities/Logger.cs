@@ -1,6 +1,4 @@
-﻿using System;
-
-namespace SEE_INSADE
+﻿namespace SEE_INSADE
 {
     public static class Logger
     {

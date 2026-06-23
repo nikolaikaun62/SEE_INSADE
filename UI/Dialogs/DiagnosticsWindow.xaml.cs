@@ -1,6 +1,5 @@
-﻿using System;
+﻿using System.Threading.Tasks;
 using System.Windows;
-using System.Threading.Tasks;
 
 namespace SEE_INSADE.UI.Dialogs
 {

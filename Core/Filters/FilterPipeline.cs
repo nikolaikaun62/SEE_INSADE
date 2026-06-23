@@ -29,7 +29,7 @@ namespace SEE_INSADE.Core.Filters
         }
 
         public IEnumerable<Filter> GetActiveFilters() => _filters.FindAll(f => f.IsEnabled);
-        public int GetActiveFiltersCount() => _filters.Count;
+        public int GetActiveFiltersCount() => _filters.FindAll(f => f.IsEnabled).Count;
     }
 
     public abstract class Filter
