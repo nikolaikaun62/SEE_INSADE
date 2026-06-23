@@ -148,7 +148,7 @@
 
                 <StackPanel Grid.Column="0" VerticalAlignment="Center">
                     <TextBlock Text="SEE INSADE" FontSize="22" FontWeight="Bold"/>
-                    <TextBlock Text="X-RAY LINE SCAN EMULATOR" Style="{StaticResource TinyLabel}" Margin="1,2,0,0"/>
+                    <TextBlock x:Name="SubtitleText" Text="X-RAY LINE SCAN EMULATOR" Style="{StaticResource TinyLabel}" Margin="1,2,0,0"/>
                 </StackPanel>
 
                 <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
@@ -161,10 +161,12 @@
                 </StackPanel>
 
                 <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-                    <Button Content="Settings" Style="{StaticResource ModernButton}" Click="OpenSettings_Click"/>
-                    <Button Content="Diagnostics" Style="{StaticResource ModernButton}" Click="OpenDiagnostics_Click"/>
-                    <Button Content="Calibrate" Style="{StaticResource ModernButton}" Click="OpenCalibration_Click"/>
-                    <Button Content="Detectors" Style="{StaticResource ModernButton}" Click="OpenDetectorVisualization_Click"/>
+                    <TextBlock x:Name="LanguageLabel" Text="Language" VerticalAlignment="Center" Margin="0,0,8,0" Foreground="{StaticResource MutedTextBrush}" FontWeight="SemiBold"/>
+                    <ComboBox x:Name="LanguageComboBox" Width="118" MinHeight="36" Margin="0,0,10,0" SelectionChanged="LanguageComboBox_SelectionChanged"/>
+                    <Button x:Name="SettingsButton" Content="Settings" Style="{StaticResource ModernButton}" Click="OpenSettings_Click"/>
+                    <Button x:Name="DiagnosticsButton" Content="Diagnostics" Style="{StaticResource ModernButton}" Click="OpenDiagnostics_Click"/>
+                    <Button x:Name="CalibrateButton" Content="Calibrate" Style="{StaticResource ModernButton}" Click="OpenCalibration_Click"/>
+                    <Button x:Name="DetectorsButton" Content="Detectors" Style="{StaticResource ModernButton}" Click="OpenDetectorVisualization_Click"/>
                 </StackPanel>
             </Grid>
         </Border>
@@ -184,31 +186,31 @@
                 <UniformGrid Grid.Row="0" Columns="5" Margin="0,0,0,14">
                     <Border Style="{StaticResource MetricTile}">
                         <StackPanel>
-                            <TextBlock Text="LINE POSITION" Style="{StaticResource TinyLabel}"/>
+                            <TextBlock x:Name="LinePositionLabel" Text="LINE POSITION" Style="{StaticResource TinyLabel}"/>
                             <TextBlock x:Name="PositionText" Text="Belt: 0px  Column: 0" Style="{StaticResource MetricValue}"/>
                         </StackPanel>
                     </Border>
                     <Border Style="{StaticResource MetricTile}">
                         <StackPanel>
-                            <TextBlock Text="OBJECTS" Style="{StaticResource TinyLabel}"/>
+                            <TextBlock x:Name="ObjectsLabel" Text="OBJECTS" Style="{StaticResource TinyLabel}"/>
                             <TextBlock x:Name="ObjectsText" Text="Objects: 0" Style="{StaticResource MetricValue}"/>
                         </StackPanel>
                     </Border>
                     <Border Style="{StaticResource MetricTile}">
                         <StackPanel>
-                            <TextBlock Text="CONVEYOR" Style="{StaticResource TinyLabel}"/>
+                            <TextBlock x:Name="ConveyorLabel" Text="CONVEYOR" Style="{StaticResource TinyLabel}"/>
                             <TextBlock x:Name="SpeedText" Text="Speed: 1.0x" Style="{StaticResource MetricValue}"/>
                         </StackPanel>
                     </Border>
                     <Border Style="{StaticResource MetricTile}">
                         <StackPanel>
-                            <TextBlock Text="DETECTOR ARRAY" Style="{StaticResource TinyLabel}"/>
+                            <TextBlock x:Name="DetectorArrayLabel" Text="DETECTOR ARRAY" Style="{StaticResource TinyLabel}"/>
                             <TextBlock x:Name="DetectorsText" Text="Detectors: 400/400" Style="{StaticResource MetricValue}"/>
                         </StackPanel>
                     </Border>
                     <Border Style="{StaticResource MetricTile}" Margin="0">
                         <StackPanel>
-                            <TextBlock Text="MATERIALS" Style="{StaticResource TinyLabel}"/>
+                            <TextBlock x:Name="MaterialsLabel" Text="MATERIALS" Style="{StaticResource TinyLabel}"/>
                             <TextBlock x:Name="MaterialsText" Text="Materials: 0 types" Style="{StaticResource MetricValue}"/>
                         </StackPanel>
                     </Border>
@@ -222,7 +224,7 @@
                         Padding="12">
                     <Grid>
                         <TabControl x:Name="ViewTabControl">
-                            <TabItem Header="STANDARD">
+                            <TabItem x:Name="StandardTab" Header="STANDARD">
                                 <Grid Background="#020304">
                                     <Viewbox Stretch="Uniform">
                                         <Image x:Name="ScanImage" Stretch="None" RenderOptions.BitmapScalingMode="NearestNeighbor"/>
@@ -232,7 +234,7 @@
                                 </Grid>
                             </TabItem>
 
-                            <TabItem Header="MATERIAL">
+                            <TabItem x:Name="MaterialTab" Header="MATERIAL">
                                 <Grid Background="#020304">
                                     <Viewbox Stretch="Uniform">
                                         <Image x:Name="MaterialImage" Stretch="None" RenderOptions.BitmapScalingMode="NearestNeighbor"/>
@@ -241,7 +243,7 @@
                                 </Grid>
                             </TabItem>
 
-                            <TabItem Header="DENSITY">
+                            <TabItem x:Name="DensityTab" Header="DENSITY">
                                 <Grid Background="#020304">
                                     <Viewbox Stretch="Uniform">
                                         <Image x:Name="DensityImage" Stretch="None" RenderOptions.BitmapScalingMode="NearestNeighbor"/>
@@ -250,7 +252,7 @@
                                 </Grid>
                             </TabItem>
 
-                            <TabItem Header="FILTERED">
+                            <TabItem x:Name="FilteredTab" Header="FILTERED">
                                 <Grid Background="#020304">
                                     <Viewbox Stretch="Uniform">
                                         <Image x:Name="FilteredImage" Stretch="None" RenderOptions.BitmapScalingMode="NearestNeighbor"/>
@@ -271,11 +273,11 @@
                     Margin="16,0,0,0">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel Margin="18">
-                        <TextBlock Text="Acquisition Control" FontSize="18" FontWeight="Bold" Margin="0,0,0,18"/>
+                        <TextBlock x:Name="AcquisitionTitle" Text="Acquisition Control" FontSize="18" FontWeight="Bold" Margin="0,0,0,18"/>
 
-                        <GroupBox Header="SCAN CONTROLS" Style="{StaticResource ControlGroupStyle}">
+                        <GroupBox x:Name="ScanControlsGroup" Header="SCAN CONTROLS" Style="{StaticResource ControlGroupStyle}">
                             <StackPanel>
-                                <TextBlock Text="Conveyor speed" Style="{StaticResource TinyLabel}"/>
+                                <TextBlock x:Name="ConveyorSpeedLabel" Text="Conveyor speed" Style="{StaticResource TinyLabel}"/>
                                 <Grid>
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*"/>
@@ -285,7 +287,7 @@
                                     <TextBlock x:Name="SpeedValueText" Grid.Column="1" Text="1.0x" HorizontalAlignment="Right" VerticalAlignment="Center" Foreground="{StaticResource AccentBrush}" FontWeight="Bold"/>
                                 </Grid>
 
-                                <TextBlock Text="Detector sensitivity" Style="{StaticResource TinyLabel}" Margin="0,14,0,0"/>
+                                <TextBlock x:Name="DetectorSensitivityLabel" Text="Detector sensitivity" Style="{StaticResource TinyLabel}" Margin="0,14,0,0"/>
                                 <Grid>
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*"/>
@@ -296,29 +298,34 @@
                                 </Grid>
 
                                 <UniformGrid Columns="2" Margin="0,16,0,0">
-                                    <Button Content="Start" Style="{StaticResource ModernButton}" Click="StartScan_Click"/>
-                                    <Button Content="Pause" Style="{StaticResource ModernButton}" Click="PauseScan_Click"/>
-                                    <Button Content="Stop" Style="{StaticResource ModernButton}" Click="StopScan_Click"/>
-                                    <Button Content="Reset" Style="{StaticResource ModernButton}" Click="ResetScan_Click"/>
-                                    <Button Content="Snapshot" Style="{StaticResource ModernButton}" Click="TakeSnapshot_Click"/>
-                                    <Button Content="Analyze" Style="{StaticResource ModernButton}" Click="OpenAnalysis_Click"/>
+                                    <Button x:Name="StartButton" Content="Start" Style="{StaticResource ModernButton}" Click="StartScan_Click"/>
+                                    <Button x:Name="PauseButton" Content="Pause" Style="{StaticResource ModernButton}" Click="PauseScan_Click"/>
+                                    <Button x:Name="StopButton" Content="Stop" Style="{StaticResource ModernButton}" Click="StopScan_Click"/>
+                                    <Button x:Name="ResetButton" Content="Reset" Style="{StaticResource ModernButton}" Click="ResetScan_Click"/>
+                                    <Button x:Name="SnapshotButton" Content="Snapshot" Style="{StaticResource ModernButton}" Click="TakeSnapshot_Click"/>
+                                    <Button x:Name="AnalyzeButton" Content="Analyze" Style="{StaticResource ModernButton}" Click="OpenAnalysis_Click"/>
                                 </UniformGrid>
                             </StackPanel>
                         </GroupBox>
 
-                        <GroupBox Header="PLUGINS" Style="{StaticResource ControlGroupStyle}">
+                        <GroupBox x:Name="PluginsGroup" Header="PLUGINS" Style="{StaticResource ControlGroupStyle}">
                             <StackPanel>
                                 <ComboBox x:Name="PluginComboBox"
                                           MinHeight="36"
                                           Background="{StaticResource PanelAltBrush}"
                                           Foreground="{StaticResource TextBrush}"
                                           BorderBrush="{StaticResource LineBrush}"/>
-                                <Button Content="Open Plugin" Style="{StaticResource ModernButton}" Margin="0,10,0,0" Click="LaunchPlugin_Click"/>
+                                <Button x:Name="OpenPluginButton" Content="Open Plugin" Style="{StaticResource ModernButton}" Margin="0,10,0,0" Click="LaunchPlugin_Click"/>
                             </StackPanel>
                         </GroupBox>
 
-                        <GroupBox Header="IMAGE FILTERS" Style="{StaticResource ControlGroupStyle}">
+                        <GroupBox x:Name="FiltersGroup" Header="IMAGE FILTERS" Style="{StaticResource ControlGroupStyle}">
                             <StackPanel>
+                                <TextBlock x:Name="FilterPresetLabel" Text="Filter preset" Style="{StaticResource TinyLabel}"/>
+                                <ComboBox x:Name="OperatorFilterComboBox" MinHeight="36" Margin="0,6,0,10" SelectionChanged="OperatorFilter_Changed"/>
+                                <TextBlock x:Name="FilterStrengthLabel" Text="Filter strength" Style="{StaticResource TinyLabel}"/>
+                                <Slider x:Name="OperatorFilterSlider" Minimum="0.1" Maximum="3.0" Value="1.0" ValueChanged="OperatorFilter_Changed"/>
+
                                 <CheckBox x:Name="BrightnessFilterCheck" Content="Brightness" Checked="Filter_Changed" Unchecked="Filter_Changed"/>
                                 <Slider x:Name="BrightnessSlider" Minimum="0.1" Maximum="3.0" Value="1.0" ValueChanged="Filter_Changed"/>
 
@@ -329,24 +336,24 @@
                                 <CheckBox x:Name="EdgeFilterCheck" Content="Edge detection" Checked="Filter_Changed" Unchecked="Filter_Changed"/>
                                 <CheckBox x:Name="NoiseFilterCheck" Content="Noise reduction" Checked="Filter_Changed" Unchecked="Filter_Changed"/>
 
-                                <Button Content="Apply Filters" Style="{StaticResource ModernButton}" Margin="0,14,0,0" Click="ApplyFilters_Click"/>
+                                <Button x:Name="ApplyFiltersButton" Content="Apply Filters" Style="{StaticResource ModernButton}" Margin="0,14,0,0" Click="ApplyFilters_Click"/>
                             </StackPanel>
                         </GroupBox>
 
-                        <GroupBox Header="DETECTOR STATUS" Style="{StaticResource ControlGroupStyle}">
+                        <GroupBox x:Name="DetectorStatusGroup" Header="DETECTOR STATUS" Style="{StaticResource ControlGroupStyle}">
                             <StackPanel>
                                 <ProgressBar x:Name="DetectorHealthBar" Value="95" Maximum="100" Height="12" Margin="0,0,0,8"/>
                                 <TextBlock x:Name="DetectorHealthText" Text="Health: 95%" Foreground="{StaticResource AccentBrush}" FontSize="12" FontWeight="SemiBold"/>
                                 <UniformGrid Columns="2" Margin="0,12,0,0">
-                                    <Button Content="Test Array" Style="{StaticResource ModernButton}" Click="TestDetectors_Click"/>
-                                    <Button Content="Calibrate" Style="{StaticResource ModernButton}" Click="CalibrateDetectors_Click"/>
+                                    <Button x:Name="TestArrayButton" Content="Test Array" Style="{StaticResource ModernButton}" Click="TestDetectors_Click"/>
+                                    <Button x:Name="CalibrateDetectorsButton" Content="Calibrate" Style="{StaticResource ModernButton}" Click="CalibrateDetectors_Click"/>
                                 </UniformGrid>
                             </StackPanel>
                         </GroupBox>
 
                         <Border Background="{StaticResource PanelAltBrush}" BorderBrush="{StaticResource LineBrush}" BorderThickness="1" CornerRadius="6" Padding="14">
                             <StackPanel>
-                                <TextBlock Text="SYSTEM INFO" Style="{StaticResource TinyLabel}" Margin="0,0,0,8"/>
+                                <TextBlock x:Name="SystemInfoLabel" Text="SYSTEM INFO" Style="{StaticResource TinyLabel}" Margin="0,0,0,8"/>
                                 <TextBlock x:Name="FrameRateText" Text="FPS: 0" FontSize="12"/>
                                 <TextBlock x:Name="MemoryText" Text="Memory: 0 MB" FontSize="12" Margin="0,4,0,0"/>
                                 <TextBlock x:Name="ProcessingText" Text="Processing: Idle" FontSize="12" Margin="0,4,0,0"/>
