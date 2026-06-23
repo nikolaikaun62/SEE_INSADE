@@ -7,6 +7,8 @@ using System.Windows.Threading;
 using SEE_INSADE.UI.Dialogs;
 using SEE_INSADE.Core.Imaging;
 using SEE_INSADE.Core.Filters;
+using SEE_INSADE.Core.Plugins;
+using SEE_INSADE.Plugins.DetectorCheck;
 using SEE_INSADE.Services.Scanning;
 
 namespace SEE_INSADE.UI.MainWindows
@@ -29,6 +31,7 @@ namespace SEE_INSADE.UI.MainWindows
         private ScanService _scanService = null!;
         private FilterPipeline _filterPipeline = null!;
         private AdvancedFilterManager _advancedFilterManager = null!;
+        private PluginManager _pluginManager = null!;
 
         // Filter references for easy access
         private BrightnessFilter _brightnessFilter = null!;
@@ -48,6 +51,9 @@ namespace SEE_INSADE.UI.MainWindows
             _scanService = new ScanService();
             _filterPipeline = new FilterPipeline();
             _advancedFilterManager = new AdvancedFilterManager();
+            _pluginManager = new PluginManager(new PluginContext(_scanService, this));
+            _pluginManager.Register(new DetectorCheckPlugin());
+            _pluginManager.LoadExternalPlugins();
 
             // Create and store filter instances
             _brightnessFilter = new BrightnessFilter();
@@ -84,6 +90,8 @@ namespace SEE_INSADE.UI.MainWindows
 
             // Initialize controls
             InitializeControls();
+            InitializePlugins();
+            UpdateAllDisplays(_scanService.GetCurrentScan());
             UpdateStatus("System initialized");
         }
 
@@ -105,6 +113,15 @@ namespace SEE_INSADE.UI.MainWindows
             // Set initial filter values
             _brightnessFilter.Intensity = BrightnessSlider.Value;
             _contrastFilter.Intensity = ContrastSlider.Value;
+        }
+
+        private void InitializePlugins()
+        {
+            PluginComboBox.ItemsSource = _pluginManager.Plugins;
+            PluginComboBox.DisplayMemberPath = nameof(IScannerPlugin.Name);
+
+            if (PluginComboBox.Items.Count > 0)
+                PluginComboBox.SelectedIndex = 0;
         }
 
         private void ScanTimer_Tick(object? sender, EventArgs e)
@@ -145,11 +162,12 @@ namespace SEE_INSADE.UI.MainWindows
 
         private void UpdateStandardView(ScanData scanData)
         {
-            // Use the scan service image directly
-            var sourcePixels = new byte[scanData.Image.PixelWidth * scanData.Image.PixelHeight * 4];
-            scanData.Image.CopyPixels(sourcePixels, scanData.Image.PixelWidth * 4, 0);
-            _scanBitmap.WritePixels(new Int32Rect(0, 0, scanData.Image.PixelWidth, scanData.Image.PixelHeight),
-                                   sourcePixels, scanData.Image.PixelWidth * 4, 0);
+            _scanBitmap = _imageProcessor.CreateColorizedXray(
+                scanData.MaterialMap,
+                scanData.DensityMap,
+                scanData.Image.PixelWidth,
+                scanData.Image.PixelHeight);
+            ScanImage.Source = _scanBitmap;
         }
 
         private void UpdateMaterialView(ScanData scanData)
@@ -330,6 +348,7 @@ namespace SEE_INSADE.UI.MainWindows
             _scanTimer.Stop();
             _frameCount = 0;
             _scanService.ResetScan();
+            UpdateAllDisplays(_scanService.GetCurrentScan());
             UpdateStatus("SCAN RESET");
         }
 
@@ -423,6 +442,18 @@ namespace SEE_INSADE.UI.MainWindows
             var debugWindow = new ImageDebugWindow(_scanBitmap);
             debugWindow.Owner = this;
             debugWindow.ShowDialog();
+        }
+
+        private void LaunchPlugin_Click(object sender, RoutedEventArgs e)
+        {
+            if (PluginComboBox.SelectedItem is not IScannerPlugin plugin)
+            {
+                UpdateStatus("No plugin selected");
+                return;
+            }
+
+            plugin.Execute(_pluginManager.Context);
+            UpdateStatus($"Plugin opened: {plugin.Name}");
         }
 
         // Additional Functionality

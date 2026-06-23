@@ -306,6 +306,17 @@
                             </StackPanel>
                         </GroupBox>
 
+                        <GroupBox Header="PLUGINS" Style="{StaticResource ControlGroupStyle}">
+                            <StackPanel>
+                                <ComboBox x:Name="PluginComboBox"
+                                          MinHeight="36"
+                                          Background="{StaticResource PanelAltBrush}"
+                                          Foreground="{StaticResource TextBrush}"
+                                          BorderBrush="{StaticResource LineBrush}"/>
+                                <Button Content="Open Plugin" Style="{StaticResource ModernButton}" Margin="0,10,0,0" Click="LaunchPlugin_Click"/>
+                            </StackPanel>
+                        </GroupBox>
+
                         <GroupBox Header="IMAGE FILTERS" Style="{StaticResource ControlGroupStyle}">
                             <StackPanel>
                                 <CheckBox x:Name="BrightnessFilterCheck" Content="Brightness" Checked="Filter_Changed" Unchecked="Filter_Changed"/>
