@@ -9,7 +9,9 @@ using SEE_INSADE.Core.Imaging;
 using SEE_INSADE.Core.Filters;
 using SEE_INSADE.Core.Localization;
 using SEE_INSADE.Core.Plugins;
+using SEE_INSADE.Plugins.Configuration;
 using SEE_INSADE.Plugins.DetectorCheck;
+using SEE_INSADE.Plugins.NuctechImg;
 using SEE_INSADE.Services.Scanning;
 
 namespace SEE_INSADE.UI.MainWindows
@@ -24,9 +26,9 @@ namespace SEE_INSADE.UI.MainWindows
         private WriteableBitmap _filteredBitmap = null!;
 
         private bool _isScanning = false;
-        private bool _isPaused = false;
         private int _frameCount = 0;
         private DateTime _lastUpdate = DateTime.Now;
+        private ScanDirection _requestedScanDirection = ScanDirection.Forward;
 
         private ImageProcessor _imageProcessor = null!;
         private ScanService _scanService = null!;
@@ -36,7 +38,6 @@ namespace SEE_INSADE.UI.MainWindows
         private LocalizationManager _localization = null!;
         private string _lastStatusKey = "status.initialized";
 
-        // Filter references for easy access
         private BrightnessFilter _brightnessFilter = null!;
         private ContrastFilter _contrastFilter = null!;
         private GrayscaleFilter _grayscaleFilter = null!;
@@ -49,43 +50,34 @@ namespace SEE_INSADE.UI.MainWindows
 
         private void InitializeSystem()
         {
-            // Initialize core components
             _imageProcessor = new ImageProcessor();
             _scanService = new ScanService();
             _filterPipeline = new FilterPipeline();
             _advancedFilterManager = new AdvancedFilterManager();
             _pluginManager = new PluginManager(new PluginContext(_scanService, this));
+            _pluginManager.Register(new ConfigurationPlugin());
             _pluginManager.Register(new DetectorCheckPlugin());
+            _pluginManager.Register(new NuctechImgPlugin());
             _pluginManager.LoadExternalPlugins();
             _localization = LocalizationManager.Instance;
             _localization.LoadLanguages();
 
-            // Create and store filter instances
             _brightnessFilter = new BrightnessFilter();
             _contrastFilter = new ContrastFilter();
             _grayscaleFilter = new GrayscaleFilter();
 
-            // Add filters to pipeline
             _filterPipeline.AddFilter(_brightnessFilter);
             _filterPipeline.AddFilter(_contrastFilter);
             _filterPipeline.AddFilter(_grayscaleFilter);
-
-            // Initially disable grayscale filter
             _grayscaleFilter.IsEnabled = false;
 
-            // Create bitmaps
             _scanBitmap = new WriteableBitmap(800, 400, 96, 96, PixelFormats.Bgr32, null);
             _materialBitmap = new WriteableBitmap(800, 400, 96, 96, PixelFormats.Bgr32, null);
             _densityBitmap = new WriteableBitmap(800, 400, 96, 96, PixelFormats.Bgr32, null);
             _filteredBitmap = new WriteableBitmap(800, 400, 96, 96, PixelFormats.Bgr32, null);
 
-            // Set image sources
-            ScanImage.Source = _scanBitmap;
-            MaterialImage.Source = _materialBitmap;
-            DensityImage.Source = _densityBitmap;
             FilteredImage.Source = _filteredBitmap;
 
-            // Initialize timers
             _scanTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16) };
             _scanTimer.Tick += ScanTimer_Tick;
 
@@ -93,11 +85,11 @@ namespace SEE_INSADE.UI.MainWindows
             _uiTimer.Tick += UiTimer_Tick;
             _uiTimer.Start();
 
-            // Initialize controls
             InitializeControls();
             InitializePlugins();
             InitializeLanguages();
             InitializeOperatorFilters();
+
             UpdateAllDisplays(_scanService.GetCurrentScan());
             ApplyLocalization();
             UpdateStatusKey("status.initialized");
@@ -105,20 +97,17 @@ namespace SEE_INSADE.UI.MainWindows
 
         private void InitializeControls()
         {
-            // Speed slider
             SpeedSlider.ValueChanged += (s, e) =>
             {
                 SpeedValueText.Text = $"{e.NewValue:F1}x";
                 SpeedText.Text = $"Speed: {e.NewValue:F1}x";
             };
 
-            // Sensitivity slider
             SensitivitySlider.ValueChanged += (s, e) =>
             {
                 SensitivityValueText.Text = $"{(int)(e.NewValue * 100)}%";
             };
 
-            // Set initial filter values
             _brightnessFilter.Intensity = BrightnessSlider.Value;
             _contrastFilter.Intensity = ContrastSlider.Value;
         }
@@ -147,6 +136,9 @@ namespace SEE_INSADE.UI.MainWindows
             OperatorFilterComboBox.ItemsSource = CreateOperatorFilterOptions();
             OperatorFilterComboBox.DisplayMemberPath = nameof(OperatorFilterOption.Name);
             OperatorFilterComboBox.SelectedIndex = 0;
+
+            if (OperatorFilterComboBox.SelectedItem is OperatorFilterOption option)
+                SetActiveFilterTab(option.Mode);
         }
 
         private void InitializePlugins()
@@ -160,37 +152,37 @@ namespace SEE_INSADE.UI.MainWindows
 
         private void ScanTimer_Tick(object? sender, EventArgs e)
         {
-            if (!_isScanning || _isPaused) return;
+            if (!_isScanning)
+                return;
 
             _frameCount++;
 
-            // Read one vertical detector line and append it to the scan image.
-            _scanService.UpdateScan(SpeedSlider.Value);
+            _scanService.UpdateScan(SpeedSlider.Value, GetEffectiveScanDirection());
             var scanData = _scanService.GetCurrentScan();
 
-            // Process images
             UpdateAllDisplays(scanData);
 
-            // Update UI every few frames
             if (_frameCount % 5 == 0)
-            {
                 UpdateRealTimeInfo(scanData);
-            }
+        }
 
+        private ScanDirection GetEffectiveScanDirection()
+        {
+            bool invert = InvertDirectionCheck?.IsChecked == true;
+
+            if (!invert)
+                return _requestedScanDirection;
+
+            return _requestedScanDirection == ScanDirection.Forward
+                ? ScanDirection.Backward
+                : ScanDirection.Forward;
         }
 
         private void UpdateAllDisplays(ScanData scanData)
         {
-            // Update standard view
             UpdateStandardView(scanData);
-
-            // Update material view
             UpdateMaterialView(scanData);
-
-            // Update density view
             UpdateDensityView(scanData);
-
-            // Update filtered view
             UpdateFilteredView(scanData);
         }
 
@@ -201,42 +193,37 @@ namespace SEE_INSADE.UI.MainWindows
                 scanData.DensityMap,
                 scanData.Image.PixelWidth,
                 scanData.Image.PixelHeight);
-            ScanImage.Source = _scanBitmap;
         }
 
         private void UpdateMaterialView(ScanData scanData)
         {
-            // Create material map visualization
-            _materialBitmap = _imageProcessor.CreateMaterialMap(scanData.MaterialMap,
-                scanData.Image.PixelWidth, scanData.Image.PixelHeight);
-            MaterialImage.Source = _materialBitmap;
-        }
-
-        private void OpenDetectorVisualization_Click(object sender, RoutedEventArgs e)
-        {
-            var detectorWindow = new DetectorVisualizationWindow(_scanService);
-            detectorWindow.Owner = this;
-            detectorWindow.ShowDialog();
+            _materialBitmap = _imageProcessor.CreateMaterialMap(
+                scanData.MaterialMap,
+                scanData.Image.PixelWidth,
+                scanData.Image.PixelHeight);
         }
 
         private void UpdateDensityView(ScanData scanData)
         {
-            // Create density map visualization
             int width = scanData.DensityMap.GetLength(0);
             int height = scanData.DensityMap.GetLength(1);
             byte[] pixels = new byte[width * height * 4];
+
+            if (_densityBitmap.PixelWidth != width || _densityBitmap.PixelHeight != height)
+                _densityBitmap = new WriteableBitmap(width, height, 96, 96, PixelFormats.Bgr32, null);
 
             for (int y = 0; y < height; y++)
             {
                 for (int x = 0; x < width; x++)
                 {
                     int index = (y * width + x) * 4;
-                    byte intensity = (byte)(scanData.DensityMap[x, y] * 255);
+                    double density = Math.Clamp(scanData.DensityMap[x, y] / 2.35, 0.0, 1.0);
+                    byte intensity = (byte)(density * 255);
 
-                    pixels[index] = intensity;     // B
-                    pixels[index + 1] = intensity; // G
-                    pixels[index + 2] = intensity; // R
-                    pixels[index + 3] = 255;       // A
+                    pixels[index] = intensity;
+                    pixels[index + 1] = intensity;
+                    pixels[index + 2] = intensity;
+                    pixels[index + 3] = 255;
                 }
             }
 
@@ -272,12 +259,8 @@ namespace SEE_INSADE.UI.MainWindows
 
         private Color ApplyAllFilters(Color input, MaterialType material, double density)
         {
-            Color result = input;
+            Color result = _filterPipeline.ApplyFilters(input, material, density);
 
-            // Apply basic filters
-            result = _filterPipeline.ApplyFilters(result, material, density);
-
-            // Apply advanced filters if enabled
             if (MaterialFilterCheck?.IsChecked == true)
                 result = _advancedFilterManager.ApplyAdvancedFilters(result, material, density);
 
@@ -303,7 +286,7 @@ namespace SEE_INSADE.UI.MainWindows
             PositionText.Text = $"Belt: {(int)scanData.ScanPosition}px  Column: {_scanService.GetCurrentScanLine()}";
             ObjectsText.Text = $"Objects: {scanData.ObjectCount}";
             SpeedText.Text = $"Speed: {SpeedSlider.Value:F1}x";
-            DetectorsText.Text = "Detectors: 400/400";
+            DetectorsText.Text = $"Detectors: {scanData.DetectorData.Length}/{scanData.DetectorData.Length}";
             MaterialsText.Text = $"Materials: {CountUniqueMaterials(scanData.MaterialMap)} types";
         }
 
@@ -329,46 +312,47 @@ namespace SEE_INSADE.UI.MainWindows
         {
             TimeText.Text = DateTime.Now.ToString("HH:mm:ss");
 
-            // Update performance info
             double fps = 1000.0 / Math.Max(1, (DateTime.Now - _lastUpdate).TotalMilliseconds);
             _lastUpdate = DateTime.Now;
 
             FrameRateText.Text = $"FPS: {fps:0}";
             MemoryText.Text = $"Memory: {GC.GetTotalMemory(false) / 1024 / 1024} MB";
-            ProcessingText.Text = $"Processing: {(_isScanning ? "Active" : "Idle")}";
+            ProcessingText.Text = $"Processing: {(_isScanning ? GetEffectiveScanDirection().ToString() : "Idle")}";
             FilterCountText.Text = $"Active Filters: {GetActiveFilterCount()}";
         }
 
         private int GetActiveFilterCount()
         {
             int count = 0;
+
             if (BrightnessFilterCheck?.IsChecked == true) count++;
             if (ContrastFilterCheck?.IsChecked == true) count++;
             if (MaterialFilterCheck?.IsChecked == true) count++;
             if (EdgeFilterCheck?.IsChecked == true) count++;
             if (NoiseFilterCheck?.IsChecked == true) count++;
+
             return count;
         }
 
-        // Scan Control Event Handlers
-        public void StartScan_Click(object sender, RoutedEventArgs e)
+        public void ForwardScan_Click(object sender, RoutedEventArgs e)
         {
+            _requestedScanDirection = ScanDirection.Forward;
             _isScanning = true;
-            _isPaused = false;
             _scanTimer.Start();
-            UpdateStatusKey("status.scanning");
+            UpdateStatus("Scanning forward");
         }
 
-        public void PauseScan_Click(object sender, RoutedEventArgs e)
+        public void BackwardScan_Click(object sender, RoutedEventArgs e)
         {
-            _isPaused = !_isPaused;
-            UpdateStatusKey(_isPaused ? "status.paused" : "status.scanning");
+            _requestedScanDirection = ScanDirection.Backward;
+            _isScanning = true;
+            _scanTimer.Start();
+            UpdateStatus("Scanning backward");
         }
 
         public void StopScan_Click(object sender, RoutedEventArgs e)
         {
             _isScanning = false;
-            _isPaused = false;
             _scanTimer.Stop();
             UpdateStatusKey("status.stopped");
         }
@@ -376,7 +360,6 @@ namespace SEE_INSADE.UI.MainWindows
         public void ResetScan_Click(object sender, RoutedEventArgs e)
         {
             _isScanning = false;
-            _isPaused = false;
             _scanTimer.Stop();
             _frameCount = 0;
             _scanService.ResetScan();
@@ -384,10 +367,11 @@ namespace SEE_INSADE.UI.MainWindows
             UpdateStatusKey("status.reset");
         }
 
-        // Filter Event Handlers
         private void Filter_Changed(object sender, RoutedEventArgs e)
         {
-            // Safely update filter intensities based on UI
+            if (_scanService == null || _filteredBitmap == null)
+                return;
+
             try
             {
                 if (_brightnessFilter != null && BrightnessSlider != null)
@@ -403,12 +387,8 @@ namespace SEE_INSADE.UI.MainWindows
                 }
 
                 if (_grayscaleFilter != null)
-                {
-                    // You can add a grayscale checkbox if needed
-                    // _grayscaleFilter.IsEnabled = GrayscaleFilterCheck?.IsChecked == true;
-                }
+                    _grayscaleFilter.IsEnabled = false;
 
-                // Update advanced filters
                 if (_advancedFilterManager != null)
                 {
                     foreach (var filter in _advancedFilterManager.Filters)
@@ -422,34 +402,91 @@ namespace SEE_INSADE.UI.MainWindows
                     }
                 }
 
-                // Force refresh if scanning
-                var scanData = _scanService.GetCurrentScan();
-                UpdateFilteredView(scanData);
+                UpdateFilteredView(_scanService.GetCurrentScan());
             }
             catch (Exception ex)
             {
-                // Log error but don't crash
                 System.Diagnostics.Debug.WriteLine($"Filter change error: {ex.Message}");
             }
         }
 
         private void ApplyFilters_Click(object sender, RoutedEventArgs e)
         {
-            // Force update of filtered view
-            if (_isScanning)
-            {
-                var scanData = _scanService.GetCurrentScan();
-                UpdateFilteredView(scanData);
-            }
+            if (_scanService != null && _filteredBitmap != null)
+                UpdateFilteredView(_scanService.GetCurrentScan());
+
             UpdateStatusKey("status.filtersApplied");
         }
 
         private void OperatorFilter_Changed(object sender, RoutedEventArgs e)
         {
+            if (OperatorFilterComboBox?.SelectedItem is OperatorFilterOption option)
+                SetActiveFilterTab(option.Mode);
+
             if (_scanService == null || _filteredBitmap == null)
                 return;
 
             UpdateFilteredView(_scanService.GetCurrentScan());
+        }
+
+        private void FilterTab_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is not Button button || button.Tag is not string modeName)
+                return;
+
+            if (!Enum.TryParse(modeName, out OperatorFilterMode mode))
+                return;
+
+            SetOperatorFilterMode(mode);
+        }
+
+        private void SetOperatorFilterMode(OperatorFilterMode mode)
+        {
+            if (OperatorFilterComboBox?.Items != null)
+            {
+                foreach (OperatorFilterOption option in OperatorFilterComboBox.Items)
+                {
+                    if (option.Mode == mode)
+                    {
+                        OperatorFilterComboBox.SelectedItem = option;
+                        break;
+                    }
+                }
+            }
+
+            SetActiveFilterTab(mode);
+
+            if (_scanService != null && _filteredBitmap != null)
+                UpdateFilteredView(_scanService.GetCurrentScan());
+        }
+
+        private void SetActiveFilterTab(OperatorFilterMode mode)
+        {
+            if (FilterTabsPanel == null)
+                return;
+
+            foreach (var child in FilterTabsPanel.Children)
+            {
+                if (child is not Button button)
+                    continue;
+
+                bool isActive = string.Equals(button.Tag?.ToString(), mode.ToString(), StringComparison.Ordinal);
+
+                button.Background = new SolidColorBrush(
+                    isActive
+                        ? Color.FromRgb(15, 118, 110)
+                        : Color.FromRgb(24, 34, 48));
+
+                button.BorderBrush = new SolidColorBrush(
+                    isActive
+                        ? Color.FromRgb(55, 211, 181)
+                        : Color.FromRgb(45, 58, 77));
+
+                button.Foreground = new SolidColorBrush(
+                    isActive
+                        ? Colors.White
+                        : Color.FromRgb(232, 237, 244));
+            }
         }
 
         private void LanguageComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -459,16 +496,81 @@ namespace SEE_INSADE.UI.MainWindows
 
             _localization.SetLanguage(language.Code);
             ApplyLocalization();
-            UpdateFilteredView(_scanService.GetCurrentScan());
+
+            if (_scanService != null && _filteredBitmap != null)
+                UpdateFilteredView(_scanService.GetCurrentScan());
+
             UpdateStatusKey(_lastStatusKey);
         }
 
-        // Dialog Event Handlers
         private void OpenSettings_Click(object sender, RoutedEventArgs e)
         {
-            var settingsWindow = new SettingsWindow();
-            settingsWindow.Owner = this;
-            settingsWindow.ShowDialog();
+            OperatorFilterMode currentMode = OperatorFilterComboBox?.SelectedItem is OperatorFilterOption option
+                ? option.Mode
+                : OperatorFilterMode.EnhancedColor;
+
+            var settingsWindow = new SettingsWindow(
+                SpeedSlider?.Value ?? 1.0,
+                SensitivitySlider?.Value ?? 1.0,
+                InvertDirectionCheck?.IsChecked == true,
+                currentMode,
+                OperatorFilterSlider?.Value ?? 1.0,
+                BrightnessFilterCheck?.IsChecked == true,
+                BrightnessSlider?.Value ?? 1.0,
+                ContrastFilterCheck?.IsChecked == true,
+                ContrastSlider?.Value ?? 1.0,
+                MaterialFilterCheck?.IsChecked == true,
+                EdgeFilterCheck?.IsChecked == true,
+                NoiseFilterCheck?.IsChecked == true)
+            {
+                Owner = this
+            };
+
+            settingsWindow.SettingsApplied += (_, _) => ApplyBasicSettings(settingsWindow);
+
+            if (settingsWindow.ShowDialog() == true)
+                ApplyBasicSettings(settingsWindow);
+        }
+
+        private void ApplyBasicSettings(SettingsWindow settings)
+        {
+            if (SpeedSlider != null)
+                SpeedSlider.Value = settings.DefaultSpeed;
+
+            if (SensitivitySlider != null)
+                SensitivitySlider.Value = settings.DefaultSensitivity;
+
+            if (InvertDirectionCheck != null)
+                InvertDirectionCheck.IsChecked = settings.InvertDirection;
+
+            if (OperatorFilterSlider != null)
+                OperatorFilterSlider.Value = settings.FilterStrength;
+
+            if (BrightnessFilterCheck != null)
+                BrightnessFilterCheck.IsChecked = settings.BrightnessEnabled;
+
+            if (BrightnessSlider != null)
+                BrightnessSlider.Value = settings.Brightness;
+
+            if (ContrastFilterCheck != null)
+                ContrastFilterCheck.IsChecked = settings.ContrastEnabled;
+
+            if (ContrastSlider != null)
+                ContrastSlider.Value = settings.Contrast;
+
+            if (MaterialFilterCheck != null)
+                MaterialFilterCheck.IsChecked = settings.MaterialEnhancementEnabled;
+
+            if (EdgeFilterCheck != null)
+                EdgeFilterCheck.IsChecked = settings.EdgeDetectionEnabled;
+
+            if (NoiseFilterCheck != null)
+                NoiseFilterCheck.IsChecked = settings.NoiseReductionEnabled;
+
+            SetOperatorFilterMode(settings.DefaultFilterMode);
+            Filter_Changed(this, new RoutedEventArgs());
+
+            UpdateStatus("Basic settings applied");
         }
 
         private void OpenDiagnostics_Click(object sender, RoutedEventArgs e)
@@ -504,7 +606,6 @@ namespace SEE_INSADE.UI.MainWindows
             UpdateStatus($"Plugin opened: {plugin.Name}");
         }
 
-        // Additional Functionality
         private void TakeSnapshot_Click(object sender, RoutedEventArgs e)
         {
             MessageBox.Show("Snapshot saved to Scans/", "Snapshot",
@@ -526,6 +627,29 @@ namespace SEE_INSADE.UI.MainWindows
             calibrationWindow.ShowDialog();
         }
 
+        private void OpenDetectorVisualization_Click(object sender, RoutedEventArgs e)
+        {
+            OpenDetectorCheckPlugin();
+        }
+
+        private void OpenDetectorCheckPlugin()
+        {
+            if (_pluginManager == null)
+                return;
+
+            foreach (var plugin in _pluginManager.Plugins)
+            {
+                if (plugin.Id == "see-insade.detector-check")
+                {
+                    plugin.Execute(_pluginManager.Context);
+                    UpdateStatus($"Plugin opened: {plugin.Name}");
+                    return;
+                }
+            }
+
+            UpdateStatus("Detector Check plugin is not available");
+        }
+
         private void UpdateStatus(string status)
         {
             StatusText.Text = status;
@@ -535,11 +659,18 @@ namespace SEE_INSADE.UI.MainWindows
         private void UpdateStatusKey(string key)
         {
             _lastStatusKey = key;
-            UpdateStatus(_localization.T(key));
+
+            if (_localization == null)
+                UpdateStatus(key);
+            else
+                UpdateStatus(_localization.T(key));
         }
 
         private void ApplyLocalization()
         {
+            if (_localization == null)
+                return;
+
             SubtitleText.Text = _localization.T("app.subtitle");
             LanguageLabel.Text = _localization.T("label.language");
             SettingsButton.Content = _localization.T("button.settings");
@@ -553,12 +684,18 @@ namespace SEE_INSADE.UI.MainWindows
             DetectorArrayLabel.Text = _localization.T("metric.detectorArray");
             MaterialsLabel.Text = _localization.T("metric.materials");
 
-            StandardTab.Header = _localization.T("tab.standard");
-            MaterialTab.Header = _localization.T("tab.material");
-            DensityTab.Header = _localization.T("tab.density");
-            FilteredTab.Header = _localization.T("tab.filtered");
+            EnhancedColorTabButton.Content = _localization.T("filter.enhancedColor");
+            HighPenetrationTabButton.Content = _localization.T("filter.highPenetration");
+            OrganicFocusTabButton.Content = _localization.T("filter.organicFocus");
+            InorganicFocusTabButton.Content = _localization.T("filter.inorganicFocus");
+            MetalFocusTabButton.Content = _localization.T("filter.metalFocus");
+            DensityMapTabButton.Content = _localization.T("filter.densityMap");
+            NegativeTabButton.Content = _localization.T("filter.negative");
+            ThresholdTabButton.Content = _localization.T("filter.threshold");
+            EdgeEmphasisTabButton.Content = _localization.T("filter.edgeEmphasis");
+            SuspectHighlightTabButton.Content = _localization.T("filter.suspectHighlight");
 
-            AcquisitionTitle.Text = _localization.T("panel.acquisition");
+            AcquisitionTitle.Text = "System";
             ScanControlsGroup.Header = _localization.T("group.scanControls");
             PluginsGroup.Header = _localization.T("group.plugins");
             FiltersGroup.Header = _localization.T("group.filters");
@@ -570,9 +707,9 @@ namespace SEE_INSADE.UI.MainWindows
             FilterPresetLabel.Text = _localization.T("label.filterPreset");
             FilterStrengthLabel.Text = _localization.T("label.filterStrength");
 
-            StartButton.Content = _localization.T("button.start");
-            PauseButton.Content = _localization.T("button.pause");
-            StopButton.Content = _localization.T("button.stop");
+            ForwardScanButton.Content = "▶ Вперёд";
+            BackwardScanButton.Content = "◀ Назад";
+            StopButton.Content = "■ Стоп";
             ResetButton.Content = _localization.T("button.reset");
             SnapshotButton.Content = _localization.T("button.snapshot");
             AnalyzeButton.Content = _localization.T("button.analyze");
@@ -586,9 +723,12 @@ namespace SEE_INSADE.UI.MainWindows
             MaterialFilterCheck.Content = _localization.T("check.materialEnhancement");
             EdgeFilterCheck.Content = _localization.T("check.edgeDetection");
             NoiseFilterCheck.Content = _localization.T("check.noiseReduction");
+            InvertDirectionCheck.Content = "Инверсия направления";
 
-            DetectorHealthText.Text = _localization.T("detector.health");
             RefreshOperatorFilterNames();
+
+            if (OperatorFilterComboBox?.SelectedItem is OperatorFilterOption option)
+                SetActiveFilterTab(option.Mode);
         }
 
         private OperatorFilterOption[] CreateOperatorFilterOptions()
@@ -610,21 +750,21 @@ namespace SEE_INSADE.UI.MainWindows
 
         private void RefreshOperatorFilterNames()
         {
-            var comboBox = OperatorFilterComboBox;
-            if (comboBox == null)
+            if (OperatorFilterComboBox == null)
                 return;
 
-            OperatorFilterMode selectedMode = comboBox.SelectedItem is OperatorFilterOption selected
+            OperatorFilterMode selectedMode = OperatorFilterComboBox.SelectedItem is OperatorFilterOption selected
                 ? selected.Mode
                 : OperatorFilterMode.EnhancedColor;
 
-            comboBox.ItemsSource = CreateOperatorFilterOptions();
+            OperatorFilterComboBox.ItemsSource = CreateOperatorFilterOptions();
 
-            foreach (OperatorFilterOption option in comboBox.Items)
+            foreach (OperatorFilterOption option in OperatorFilterComboBox.Items)
             {
                 if (option.Mode == selectedMode)
                 {
-                    comboBox.SelectedItem = option;
+                    OperatorFilterComboBox.SelectedItem = option;
+                    SetActiveFilterTab(option.Mode);
                     break;
                 }
             }

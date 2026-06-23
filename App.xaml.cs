@@ -1,7 +1,10 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using SEE_INSADE.Core.Localization;
+using SEE_INSADE.Core.Security;
 using SEE_INSADE.Data;
 using SEE_INSADE.Services;
+using SEE_INSADE.UI.Dialogs;
 using SEE_INSADE.UI.MainWindows;
 using SEE_INSADE.ViewModels;
 using System.Windows;
@@ -39,10 +42,24 @@ namespace SEE_INSADE
                 SeedData.Initialize(context);
             }
 
+            LocalizationManager.Instance.LoadLanguages();
+            UserAccessService.Instance.Load();
+
+            ShutdownMode = ShutdownMode.OnExplicitShutdown;
+
+            var loginWindow = new LoginWindow();
+            if (loginWindow.ShowDialog() != true)
+            {
+                Shutdown();
+                return;
+            }
+
             // Create and show main window
             var mainWindow = new MainWindow();
             var viewModel = serviceProvider.GetRequiredService<MainViewModel>();
             mainWindow.DataContext = viewModel;
+            MainWindow = mainWindow;
+            ShutdownMode = ShutdownMode.OnMainWindowClose;
             mainWindow.Show();
         }
     }

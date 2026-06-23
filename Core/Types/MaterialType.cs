@@ -1,17 +1,29 @@
-﻿namespace SEE_INSADE
+namespace SEE_INSADE
 {
     public enum MaterialType
     {
         Unknown,
         Air,
+
+        // Organic / low-Z materials
         Organic,
-        Inorganic,
-        HeavyMetal,
-        LightMetal,
-        Electronics,
         Plastic,
-        Glass,
         Liquid,
-        Mixed
+        Sugar,
+
+        // Inorganic / transition materials
+        Inorganic,
+        Salt,
+        Glass,
+        Mixed,
+
+        // Metals
+        Aluminum,
+        LightMetal,
+        Iron,
+        Electronics,
+        HeavyMetal,
+        Gold,
+        Lead
     }
 }

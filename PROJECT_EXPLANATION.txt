@@ -1,0 +1,382 @@
+SEE INSADE - пояснение проекта
+================================
+
+Назначение проекта
+------------------
+SEE INSADE - WPF-приложение на .NET 8 для имитации построчного X-ray сканера.
+Логика построена вокруг линейки детекторов: каждый тик считывается вертикальная
+линия данных, после чего изображение сдвигается и постепенно формируется как у
+конвейерного рентген-сканера.
+
+В проекте есть:
+- dual-energy модель с низким и высоким энергетическим каналом;
+- классификация материалов по эффективному Z и плотности;
+- операторские фильтры просмотра;
+- plugin-система;
+- плагин проверки детекторов;
+- плагин глубокой конфигурации;
+- система пользователей, ролей и уровней доступа;
+- языковые пакеты ru/en/kk в отдельных JSON-файлах.
+
+
+Основные технологии
+-------------------
+- .NET 8 / WPF - desktop-интерфейс.
+- Entity Framework Core + SQLite - локальная база данных для сущностей проекта.
+- JSON-конфиги - настройки приложения, языки, пользователи.
+- WriteableBitmap - быстрое построение scan/image/material/filter views.
+
+
+Корень проекта
+--------------
+App.xaml
+    Глобальные ресурсы WPF-приложения: базовые стили, кисти, шаблоны кнопок.
+
+App.xaml.cs
+    Точка старта WPF-приложения. Создаёт service provider, DbContext,
+    MainWindow, ViewModel и инициализирует seed-данные.
+
+README.md
+    Краткое описание проекта и структуры.
+
+SEE_INSADE.csproj
+    Файл проекта .NET. Описывает target framework, WPF, NuGet-пакеты и копирование
+    языковых файлов Languages/*.json в выходную папку.
+
+SEE_INSADE.sln
+    Visual Studio solution-файл.
+
+PROJECT_EXPLANATION.txt
+    Этот документ: подробное пояснение проекта, папок и файлов.
+
+
+Папка Core
+----------
+Core содержит низкоуровневую логику, которая не должна напрямую зависеть от UI.
+
+Core/Config/ConfigManager.cs
+    Центральная система конфигурации. Загружает и сохраняет Config/settings.json.
+    Хранит ScanSettings, DisplaySettings, FilterSettings, scan profiles и filter
+    presets. Конфигурационный плагин редактирует именно эти настройки.
+
+Core/Emulators/ScannerEmulator.cs
+    Старый/вспомогательный генератор scan data. Может использоваться для тестов
+    и быстрых заглушек без полного ScanService.
+
+Core/Filters/FilterPipeline.cs
+    Базовая цепочка фильтров: яркость, контраст, grayscale/invert. Сейчас часть
+    операторской логики вынесена в Core/Imaging, но pipeline остаётся полезным
+    для совместимости и базовых операций.
+
+Core/Filters/AdvancedFilterManager.cs
+    Набор продвинутых фильтров: material enhancement, edge detection, noise
+    reduction, sharpness, gamma, threshold. Используется UI для расширенного
+    воздействия на изображение.
+
+Core/Imaging/ImageProcessor.cs
+    Главный обработчик изображений. Создаёт:
+    - material map;
+    - цветное X-ray изображение на белом фоне;
+    - operator filter view;
+    - density/edge/suspect/high penetration режимы.
+
+Core/Imaging/OperatorFilterMode.cs
+    Enum режимов операторского просмотра: EnhancedColor, HighPenetration,
+    OrganicFocus, InorganicFocus, MetalFocus, DensityMap, Negative, Threshold,
+    EdgeEmphasis, SuspectHighlight.
+
+Core/Imaging/OperatorFilterSettings.cs
+    DTO настроек фильтра. Объединяет выбранный режим, силу фильтра, яркость,
+    контраст, усиление материалов, контуры и шумоподавление.
+
+Core/Localization/LanguageOption.cs
+    Модель языка для ComboBox: code + display name.
+
+Core/Localization/LocalizationManager.cs
+    Загружает языковые JSON-файлы из Languages рядом с exe и из рабочей папки.
+    Хранит текущий язык, даёт T(key) и TText(text), умеет находить ключи не только
+    по английскому тексту, но и по уже переведённым строкам.
+
+Core/Localization/LocalizationHelper.cs
+    Универсальный helper для WPF-окон. Проходит по LogicalTree и переводит Title,
+    TextBlock.Text, Button.Content, GroupBox.Header, TabItem.Header и похожие
+    элементы по текущему языку.
+
+Core/Plugins/IScannerPlugin.cs
+    Контракт плагина. Каждый плагин должен иметь Id, Name, Description и Execute.
+    PluginContext передаёт плагину ScanService и owner Window.
+
+Core/Plugins/PluginManager.cs
+    Реестр плагинов. Регистрирует встроенные плагины и загружает внешние DLL из
+    папки Plugins рядом с exe.
+
+Core/Security/UserRole.cs
+    Роли пользователей: Observer, Operator, Supervisor, Administrator.
+
+Core/Security/AccessPermission.cs
+    Разрешения: просмотр скана, управление сканом, фильтры, диагностика,
+    калибровка, настройка системы, управление пользователями/плагинами, экспорт.
+
+Core/Security/UserAccount.cs
+    Модель пользователя: логин, имя, роль, уровень доступа, активность, разрешения.
+
+Core/Security/UserAccessService.cs
+    Файловый сервис пользователей. Хранит Security/users.json, создаёт дефолтные
+    учётки observer/operator/supervisor/admin, назначает права по роли, сохраняет
+    изменения из конфигурационного плагина.
+
+Core/Types/MaterialType.cs
+    Enum материалов. Включает воздух, органику, пластик, жидкость, сахар, соль,
+    стекло, алюминий, железо, электронику, тяжёлые металлы, золото, свинец и т.д.
+
+Core/Utilities/Logger.cs
+    Простой логгер для диагностических сообщений.
+
+
+Папка Data
+----------
+Data/ApplicationDbContext.cs
+    EF Core DbContext. Содержит DbSet<Detector> и DbSet<ScanSession>, настраивает
+    SQLite-файл see_insade.db.
+
+Data/SeedData.cs
+    Начальное заполнение базы демонстрационными детекторами.
+
+
+Папка Models
+------------
+Models/Detector.cs
+    Базовая модель детектора для базы данных.
+
+Models/EnhancedDetector.cs
+    Расширенная модель детектора для UI/диагностики.
+
+Models/ScanSession.cs
+    Модель scan session: идентификатор, статус, время и параметры скана.
+
+
+Папка Services
+--------------
+Services/Scanning/ScanService.cs
+    Главный физический/логический симулятор X-ray сканирования. Хранит сцену,
+    детекторы, текущее изображение, material/density maps. Реализует:
+    - движение вперёд/назад;
+    - построчное формирование изображения;
+    - dual-energy измерение;
+    - расчёт low/high signals;
+    - attenuation ratio;
+    - estimated Zeff;
+    - классификацию материалов;
+    - генерацию тестовых STP-объектов и случайных предметов.
+
+Services/DetectorService.cs
+    Сервис работы с детекторами из базы.
+
+Services/DetectorDiagnosticService.cs
+    Диагностика и калибровка детекторов.
+
+Services/IDetectorService.cs
+    Интерфейс DetectorService.
+
+Services/IDetectorDiagnosticService.cs
+    Интерфейс DetectorDiagnosticService.
+
+Services/IScanEmulationService.cs
+    Интерфейс сервиса эмуляции сканирования.
+
+Services/ScanEmulationService.cs
+    Вспомогательная эмуляция scan workflow.
+
+Services/Analysis/MaterialAnalyzer.cs
+    Анализ material map и density map: распределение материалов, риск/метрики.
+
+Services/Export/DataExporter.cs
+    Экспорт scan data.
+
+
+Папка UI
+--------
+UI/MainWindows/MainWindow.xaml
+    Основной интерфейс оператора. Содержит:
+    - панель языка;
+    - панель плагинов;
+    - вкладки/кнопки операторских фильтров;
+    - основное изображение сканирования;
+    - управление направлением скана, скоростью, чувствительностью;
+    - hidden compatibility controls для старого кода.
+
+UI/MainWindows/MainWindow.xaml.cs
+    Code-behind основного окна. Инициализирует ScanService, ImageProcessor,
+    PluginManager, LocalizationManager, UserAccessService. Управляет сканом,
+    фильтрами, языком, плагинами и открытием диалогов.
+
+UI/Dialogs/SettingsWindow.xaml
+    Окно базовых настроек текущей сессии: скорость, чувствительность, направление,
+    дефолтный фильтр, яркость/контраст и чекбоксы фильтров.
+
+UI/Dialogs/SettingsWindow.xaml.cs
+    Логика SettingsWindow. Передаёт настройки обратно в MainWindow через свойства
+    и событие SettingsApplied.
+
+UI/Dialogs/DiagnosticsWindow.xaml
+    Окно системной диагностики: состояние CPU/GPU/памяти, компоненты, hardware tests.
+
+UI/Dialogs/DiagnosticsWindow.xaml.cs
+    Логика диагностических тестов и отчёта.
+
+UI/Dialogs/CalibrationWizard.xaml
+    Мастер калибровки: подготовка, проверка детекторов, energy calibration,
+    geometry setup, image quality, final verification.
+
+UI/Dialogs/CalibrationWizard.xaml.cs
+    Переключение шагов мастера и сохранение профиля.
+
+UI/Dialogs/DetectorVisualizationWindow.xaml
+    Старое/дополнительное окно визуализации детекторов.
+
+UI/Dialogs/DetectorVisualizationWindow.xaml.cs
+    Рисует состояние детекторов, health/activity/sensitivity, выбранный детектор.
+
+UI/Dialogs/ImageDebugWindow.xaml
+    Окно анализа изображения: pixel analyzer, histogram, heat map, edge detection,
+    distance tool, density profile, object counter.
+
+UI/Dialogs/ImageDebugWindow.xaml.cs
+    Логика инструментов анализа и измерений.
+
+UI/Dialogs/HistogramWindow.xaml
+    Заготовка окна гистограммы.
+
+
+Папка UI/Plugins
+----------------
+UI/Plugins/DetectorCheckPluginWindow.xaml
+    UI плагина проверки детекторов. Показывает горизонтальную линейку детекторов.
+
+UI/Plugins/DetectorCheckPluginWindow.xaml.cs
+    Live-отрисовка detector line. Каждый детектор отображается как участок
+    горизонтальной полосы с сигналом, чувствительностью, low/high, Zeff, материалом.
+
+UI/Plugins/ConfigurationPluginWindow.xaml
+    UI нового конфигурационного плагина. Содержит вкладки Scanner, Display,
+    Filters, Plugins, Users and access.
+
+UI/Plugins/ConfigurationPluginWindow.xaml.cs
+    Логика конфигурационного плагина: загрузка/сохранение Config/settings.json,
+    редактирование пользователей, ролей и уровней доступа.
+
+
+Папка Plugins
+-------------
+Plugins/DetectorCheck/DetectorCheckPlugin.cs
+    Встроенный плагин проверки детекторов. Реализует IScannerPlugin и открывает
+    DetectorCheckPluginWindow.
+
+Plugins/Configuration/ConfigurationPlugin.cs
+    Встроенный плагин глубокой конфигурации. Реализует IScannerPlugin и открывает
+    ConfigurationPluginWindow.
+
+
+Папка Languages
+---------------
+Languages/en.json
+    Английский языковой пакет.
+
+Languages/ru.json
+    Русский языковой пакет.
+
+Languages/kk.json
+    Казахский языковой пакет.
+
+Как добавить новый язык:
+1. Скопировать en.json.
+2. Изменить code и name.
+3. Перевести значения strings.
+4. Положить файл в Languages рядом с exe или в корневую папку проекта.
+5. Перезапустить программу.
+
+
+Папка Views
+-----------
+Views/FilterPanel.xaml
+    Дополнительная панель фильтров для MVVM-части проекта.
+
+Views/FilterPanel.xaml.cs
+    Code-behind панели фильтров.
+
+
+Папка ViewModels
+----------------
+ViewModels/MainViewModel.cs
+    MVVM ViewModel для старой/параллельной части приложения: детекторы,
+    диагностика, калибровка, scan emulation.
+
+ViewModels/FilterViewModel.cs
+    ViewModel фильтров.
+
+
+Папка Utilities
+---------------
+Utilities/RelayCommand.cs
+    Реализация ICommand для MVVM-команд.
+
+Utilities/ImageHelper.cs
+    Вспомогательные методы для работы с изображениями.
+
+
+Папка Converters
+----------------
+Converters/BoolToColorConverter.cs
+    WPF converter bool -> color.
+
+Converters/BoolToStatusConverter.cs
+    WPF converter bool -> status text.
+
+Converters/BoolToVisibilityConverter.cs
+    WPF converter bool -> Visibility.
+
+Converters/InverseBoolToVisibilityConverter.cs
+    Инвертированный bool -> Visibility.
+
+Converters/EfficiencyToColorConverter.cs
+    Converter эффективности детектора в цвет.
+
+
+Runtime-файлы
+-------------
+Config/settings.json
+    Создаётся при сохранении настроек. Хранит параметры сканера, отображения,
+    фильтров.
+
+Security/users.json
+    Создаётся UserAccessService. Хранит пользователей, роли, уровни доступа и
+    разрешения.
+
+see_insade.db
+    SQLite-база приложения. Runtime-файл, не должен коммититься.
+
+
+Роли доступа
+------------
+Observer / Наблюдатель
+    Только просмотр скана.
+
+Operator / Оператор
+    Просмотр, управление сканированием, фильтры, экспорт.
+
+Supervisor / Супервайзер
+    Права оператора + диагностика и калибровка.
+
+Administrator / Администратор
+    Полный доступ: конфигурация, пользователи, плагины, диагностика, экспорт.
+
+
+Главная логика данных
+---------------------
+1. ScanService генерирует физическую сцену и детекторные измерения.
+2. Каждый tick считывается одна линия detector array.
+3. ImageProcessor преобразует material/density maps в изображение.
+4. MainWindow показывает filtered image.
+5. Plugins получают доступ к ScanService через PluginContext.
+6. ConfigurationPlugin меняет ConfigManager и UserAccessService.
+7. LocalizationManager подгружает языковые JSON-файлы и переводит окна.

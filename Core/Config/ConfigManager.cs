@@ -52,6 +52,7 @@ namespace SEE_INSADE.Core.Config
         {
             try
             {
+                Directory.CreateDirectory(Path.GetDirectoryName(ConfigPath) ?? ".");
                 var options = new JsonSerializerOptions { WriteIndented = true };
                 var json = JsonSerializer.Serialize(Current, options);
                 File.WriteAllText(ConfigPath, json);
@@ -71,11 +72,11 @@ namespace SEE_INSADE.Core.Config
             {
                 ScanSettings = new ScanSettings
                 {
-                    Width = 800,
-                    Height = 400,
+                    Width = 1400,
+                    Height = 620,
                     Speed = 1.0,
                     AutoStart = false,
-                    DetectorCount = 400
+                    DetectorCount = 620
                 },
                 DisplaySettings = new DisplaySettings
                 {

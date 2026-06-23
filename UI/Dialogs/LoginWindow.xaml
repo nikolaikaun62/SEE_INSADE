@@ -1,0 +1,75 @@
+<Window x:Class="SEE_INSADE.UI.Dialogs.LoginWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="SEE INSADE - Sign In"
+        Width="520"
+        Height="420"
+        WindowStartupLocation="CenterScreen"
+        ResizeMode="NoResize"
+        Background="#EFF4FA"
+        FontFamily="Segoe UI">
+    <Window.Resources>
+        <SolidColorBrush x:Key="PanelBrush" Color="#FFFFFF"/>
+        <SolidColorBrush x:Key="LineBrush" Color="#D6E0ED"/>
+        <SolidColorBrush x:Key="InkBrush" Color="#142033"/>
+        <SolidColorBrush x:Key="MutedBrush" Color="#667085"/>
+        <SolidColorBrush x:Key="AccentBrush" Color="#0F766E"/>
+
+        <Style TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource InkBrush}"/>
+        </Style>
+
+        <Style TargetType="TextBox">
+            <Setter Property="MinHeight" Value="38"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="Padding" Value="10,6"/>
+            <Setter Property="Margin" Value="0,6,0,14"/>
+        </Style>
+
+        <Style TargetType="PasswordBox">
+            <Setter Property="MinHeight" Value="38"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="Padding" Value="10,6"/>
+            <Setter Property="Margin" Value="0,6,0,14"/>
+        </Style>
+
+        <Style TargetType="Button">
+            <Setter Property="MinHeight" Value="40"/>
+            <Setter Property="Padding" Value="16,8"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+        </Style>
+    </Window.Resources>
+
+    <Grid Margin="24">
+        <Border Background="{StaticResource PanelBrush}"
+                BorderBrush="{StaticResource LineBrush}"
+                BorderThickness="1"
+                CornerRadius="10"
+                Padding="24">
+            <StackPanel>
+                <TextBlock Text="SEE INSADE" FontSize="28" FontWeight="Bold"/>
+                <TextBlock Text="Operator authorization required" Foreground="{StaticResource MutedBrush}" Margin="1,4,0,24"/>
+
+                <TextBlock Text="User name" FontWeight="SemiBold"/>
+                <TextBox x:Name="UserNameTextBox" Text="admin"/>
+
+                <TextBlock Text="Password" FontWeight="SemiBold"/>
+                <PasswordBox x:Name="PasswordBox" Password="123456" KeyDown="PasswordBox_KeyDown"/>
+
+                <TextBlock x:Name="ErrorText" Text="" Foreground="#B42318" MinHeight="22" Margin="0,0,0,10"/>
+
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <TextBlock Text="Default: admin/123456, operator/operator" Foreground="{StaticResource MutedBrush}" VerticalAlignment="Center"/>
+                    <Button Grid.Column="1" Content="Cancel" Width="96" Margin="0,0,8,0" Click="Cancel_Click"/>
+                    <Button Grid.Column="2" Content="Sign In" Width="110" Background="{StaticResource AccentBrush}" Foreground="White" Click="SignIn_Click"/>
+                </Grid>
+            </StackPanel>
+        </Border>
+    </Grid>
+</Window>

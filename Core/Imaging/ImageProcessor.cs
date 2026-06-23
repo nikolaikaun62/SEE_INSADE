@@ -126,7 +126,7 @@ namespace SEE_INSADE.Core.Imaging
                 {
                     int index = (y * width + x) * 4;
                     MaterialType material = GetMapValue(materialMap, x, y, MaterialType.Air);
-                    double density = Math.Clamp(GetMapValue(densityMap, x, y, 0), 0.0, 1.5);
+                    double density = Math.Clamp(GetMapValue(densityMap, x, y, 0), 0.0, 2.35);
                     Color color = GetOperatorFilterColor(materialMap, densityMap, x, y, material, density, settings.Mode, intensity);
                     color = ApplyOperatorToggles(materialMap, densityMap, x, y, material, density, color, settings);
 
@@ -174,14 +174,23 @@ namespace SEE_INSADE.Core.Imaging
             return material switch
             {
                 MaterialType.Organic => Color.FromRgb(238, 138, 48),
-                MaterialType.Plastic => Color.FromRgb(245, 167, 62),
+                MaterialType.Sugar => Color.FromRgb(255, 203, 92),
+                MaterialType.Plastic => Color.FromRgb(238, 139, 55),
                 MaterialType.Liquid => Color.FromRgb(235, 183, 76),
-                MaterialType.Inorganic => Color.FromRgb(56, 126, 220),
-                MaterialType.Glass => Color.FromRgb(73, 165, 220),
-                MaterialType.LightMetal => Color.FromRgb(36, 101, 194),
-                MaterialType.HeavyMetal => Color.FromRgb(20, 38, 86),
-                MaterialType.Electronics => Color.FromRgb(50, 150, 116),
+
+                MaterialType.Inorganic => Color.FromRgb(92, 176, 108),
+                MaterialType.Salt => Color.FromRgb(108, 190, 96),
+                MaterialType.Glass => Color.FromRgb(86, 175, 124),
                 MaterialType.Mixed => Color.FromRgb(76, 165, 82),
+
+                MaterialType.Aluminum => Color.FromRgb(72, 142, 232),
+                MaterialType.LightMetal => Color.FromRgb(36, 101, 194),
+                MaterialType.Iron => Color.FromRgb(38, 72, 142),
+                MaterialType.Electronics => Color.FromRgb(50, 150, 116),
+                MaterialType.HeavyMetal => Color.FromRgb(20, 38, 86),
+                MaterialType.Gold => Color.FromRgb(120, 78, 8),
+                MaterialType.Lead => Color.FromRgb(12, 18, 28),
+
                 MaterialType.Air => Colors.White,
                 _ => Color.FromRgb(245, 248, 252)
             };
@@ -193,10 +202,16 @@ namespace SEE_INSADE.Core.Imaging
                 return Colors.White;
 
             Color baseColor = GetMaterialColor(material);
-            double opacity = Math.Clamp(0.32 + density * 0.68, 0.0, 1.0);
-            double darkening = material is MaterialType.HeavyMetal or MaterialType.LightMetal
-                ? Math.Clamp(density * 0.55, 0.0, 0.68)
-                : Math.Clamp(density * 0.28, 0.0, 0.42);
+            double opacity = Math.Clamp(0.22 + density * 0.58, 0.0, 1.0);
+            double darkening = IsMetal(material)
+                ? Math.Clamp(density * 0.42, 0.0, 0.72)
+                : Math.Clamp(density * 0.22, 0.0, 0.42);
+
+            if (material == MaterialType.Gold)
+                darkening = Math.Clamp(density * 0.78, 0.0, 0.90);
+
+            if (material == MaterialType.Lead)
+                darkening = Math.Clamp(density * 0.72, 0.0, 0.90);
 
             byte r = BlendChannel(255, baseColor.R, opacity, darkening);
             byte g = BlendChannel(255, baseColor.G, opacity, darkening);
@@ -221,9 +236,9 @@ namespace SEE_INSADE.Core.Imaging
             {
                 OperatorFilterMode.EnhancedColor => BoostSaturation(baseColor, 0.35 * intensity),
                 OperatorFilterMode.HighPenetration => HighPenetrationColor(material, density, intensity),
-                OperatorFilterMode.OrganicFocus => FocusMaterial(baseColor, material is MaterialType.Organic or MaterialType.Plastic or MaterialType.Liquid, intensity),
-                OperatorFilterMode.InorganicFocus => FocusMaterial(baseColor, material is MaterialType.Inorganic or MaterialType.Glass or MaterialType.LightMetal, intensity),
-                OperatorFilterMode.MetalFocus => FocusMaterial(baseColor, material is MaterialType.LightMetal or MaterialType.HeavyMetal or MaterialType.Electronics, intensity),
+                OperatorFilterMode.OrganicFocus => FocusMaterial(baseColor, material is MaterialType.Organic or MaterialType.Plastic or MaterialType.Liquid or MaterialType.Sugar, intensity),
+                OperatorFilterMode.InorganicFocus => FocusMaterial(baseColor, material is MaterialType.Inorganic or MaterialType.Glass or MaterialType.Salt or MaterialType.Aluminum or MaterialType.LightMetal, intensity),
+                OperatorFilterMode.MetalFocus => FocusMaterial(baseColor, IsMetal(material) || material == MaterialType.Electronics, intensity),
                 OperatorFilterMode.DensityMap => DensityColor(density),
                 OperatorFilterMode.Negative => Color.FromRgb((byte)(255 - baseColor.R), (byte)(255 - baseColor.G), (byte)(255 - baseColor.B)),
                 OperatorFilterMode.Threshold => DensityThreshold(material, density, intensity),
@@ -251,15 +266,24 @@ namespace SEE_INSADE.Core.Imaging
             double penetration = Math.Clamp(density * intensity, 0.0, 1.0);
             byte shade = (byte)Math.Clamp(255 - penetration * 235, 0, 255);
 
-            if (material is MaterialType.HeavyMetal or MaterialType.LightMetal)
-                return Color.FromRgb((byte)(shade * 0.35), (byte)(shade * 0.45), shade);
+            if (material == MaterialType.Gold)
+                return Color.FromRgb((byte)(shade * 0.22), (byte)(shade * 0.16), (byte)(shade * 0.08));
+
+            if (material == MaterialType.Lead)
+                return Color.FromRgb((byte)(shade * 0.10), (byte)(shade * 0.12), (byte)(shade * 0.16));
+
+            if (material is MaterialType.Iron or MaterialType.HeavyMetal)
+                return Color.FromRgb((byte)(shade * 0.28), (byte)(shade * 0.36), shade);
+
+            if (material is MaterialType.Aluminum or MaterialType.LightMetal)
+                return Color.FromRgb((byte)(shade * 0.42), (byte)(shade * 0.56), shade);
 
             return Color.FromRgb(shade, shade, shade);
         }
 
         private static Color DensityColor(double density)
         {
-            double normalized = Math.Clamp(density / 1.5, 0.0, 1.0);
+            double normalized = Math.Clamp(density / 2.35, 0.0, 1.0);
             byte value = (byte)Math.Clamp(255 - normalized * 255, 0, 255);
             return Color.FromRgb(value, value, value);
         }
@@ -295,11 +319,13 @@ namespace SEE_INSADE.Core.Imaging
 
         private static Color SuspectHighlightColor(Color baseColor, MaterialType material, double density, double intensity)
         {
-            bool suspect = material is MaterialType.Organic or MaterialType.HeavyMetal or MaterialType.Electronics && density > 0.55;
+            bool suspect = (material is MaterialType.Organic or MaterialType.Sugar or MaterialType.HeavyMetal or MaterialType.Iron or MaterialType.Gold or MaterialType.Lead or MaterialType.Electronics)
+                           && density > 0.55;
+
             if (!suspect)
                 return FocusMaterial(baseColor, false, intensity);
 
-            Color alert = material == MaterialType.Organic
+            Color alert = material is MaterialType.Organic or MaterialType.Sugar
                 ? Color.FromRgb(255, 112, 31)
                 : Color.FromRgb(230, 32, 58);
 
@@ -366,6 +392,7 @@ namespace SEE_INSADE.Core.Imaging
         {
             secondAmount = Math.Clamp(secondAmount, 0.0, 1.0);
             double firstAmount = 1.0 - secondAmount;
+
             return Color.FromRgb(
                 (byte)Math.Clamp(first.R * firstAmount + second.R * secondAmount, 0, 255),
                 (byte)Math.Clamp(first.G * firstAmount + second.G * secondAmount, 0, 255),
@@ -377,6 +404,16 @@ namespace SEE_INSADE.Core.Imaging
             double value = background * (1.0 - opacity) + foreground * opacity;
             value *= 1.0 - darkening;
             return (byte)Math.Clamp(value, 0, 255);
+        }
+
+        private static bool IsMetal(MaterialType material)
+        {
+            return material is MaterialType.Aluminum
+                or MaterialType.LightMetal
+                or MaterialType.Iron
+                or MaterialType.HeavyMetal
+                or MaterialType.Gold
+                or MaterialType.Lead;
         }
 
         public int GetActiveFiltersCount()

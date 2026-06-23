@@ -17,16 +17,11 @@ namespace SEE_INSADE.Core.Localization
 
         public void LoadLanguages()
         {
-            string directory = Path.Combine(AppContext.BaseDirectory, "Languages");
-            Directory.CreateDirectory(directory);
-
             _languages.Clear();
             AvailableLanguages.Clear();
 
-            foreach (string file in Directory.EnumerateFiles(directory, "*.json"))
-            {
-                TryLoadLanguage(file);
-            }
+            LoadLanguageDirectory(Path.Combine(AppContext.BaseDirectory, "Languages"), createIfMissing: true);
+            LoadLanguageDirectory(Path.Combine(Environment.CurrentDirectory, "Languages"), createIfMissing: false);
 
             if (!_languages.ContainsKey("en") && _languages.Count > 0)
             {
@@ -62,18 +57,51 @@ namespace SEE_INSADE.Core.Localization
 
         public string TText(string englishText)
         {
+            string? key = FindKeyByTranslatedValue(englishText);
+            if (key != null)
+                return T(key);
+
+            return englishText;
+        }
+
+        private void LoadLanguageDirectory(string directory, bool createIfMissing)
+        {
+            if (createIfMissing)
+                Directory.CreateDirectory(directory);
+
+            if (!Directory.Exists(directory))
+                return;
+
+            foreach (string file in Directory.EnumerateFiles(directory, "*.json"))
+            {
+                TryLoadLanguage(file);
+            }
+        }
+
+        private string? FindKeyByTranslatedValue(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text))
+                return null;
+
+            foreach (Dictionary<string, string> language in _languages.Values)
+            {
+                foreach (var pair in language)
+                {
+                    if (pair.Value.Equals(text, StringComparison.Ordinal))
+                        return pair.Key;
+                }
+            }
+
             if (!_languages.TryGetValue("en", out Dictionary<string, string>? english))
-                return englishText;
+                return null;
 
             foreach (var pair in english)
             {
-                if (!pair.Value.Equals(englishText, StringComparison.Ordinal))
-                    continue;
-
-                return T(pair.Key);
+                if (pair.Value.Equals(text, StringComparison.OrdinalIgnoreCase))
+                    return pair.Key;
             }
 
-            return englishText;
+            return null;
         }
 
         private void TryLoadLanguage(string file)
